@@ -1,0 +1,11 @@
+CompileFlags:
+  Compiler: x86_64-w64-mingw32-g++
+  Add:
+    - -ffreestanding
+    - -fshort-wchar
+    - -mno-red-zone
+    - -fno-exceptions
+    - -fno-rtti
+    - -std=c++26
+  Remove:
+    - -mno-red-zone  # only if clangd's bundled clang doesn't recognize it — see note below
