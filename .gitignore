@@ -1,0 +1,5 @@
+.clangd
+BOOTX64.EFI
+settings.json
+build/
+esp/EFI/BOOT
