@@ -19,10 +19,27 @@ uint32_t Graphics::blendColor(uint32_t bgColor, uint32_t fgColor, uint8_t alpha)
     return (r << 16) | (g << 8) | b;
 }
 
-void Graphics::clearBackground(UINT32 *framebuffer, UINT32 width, UINT32 height, UINT32 stride) {
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            framebuffer[y * stride + x] = 0x00000000;
-        }
+void Graphics::PresentFrame() {
+    UINT64 *dst = (UINT64*)front.pixels;
+    const UINT64 *src = (const UINT64*)back.pixels;
+    UINT64 total = (UINT64)front.stride * front.height;
+    UINT64 count = total / 2;
+
+    for (UINT64 i = 0; i < count; i++) {
+        __asm__ __volatile__("movnti %1, %0" : "=m"(dst[i]) : "r"(src[i]));
+    }
+    if (total & 1) front.pixels[total - 1] = back.pixels[total - 1];
+    __asm__ __volatile__("sfence" ::: "memory");
+}
+
+void Graphics::DrawRectangle(Framebuffer &fb, INT32 x, INT32 y, INT32 w, INT32 h, UINT32 color) {
+    INT32 x0 = x < 0 ? 0 : x;
+    INT32 y0 = y < 0 ? 0 : y;
+    INT32 x1 = x + w > (INT32)fb.width  ? (INT32)fb.width  : x + w;
+    INT32 y1 = y + h > (INT32)fb.height ? (INT32)fb.height : y + h;
+
+    for (INT32 py = y0; py < y1; py++) {
+        UINT32 *row = fb.pixels + (UINT32)py * fb.stride;
+        for (INT32 px = x0; px < x1; px++) row[px] = color;
     }
 }

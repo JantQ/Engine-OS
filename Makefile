@@ -33,7 +33,7 @@ run: BOOTX64.EFI
 	cp BOOTX64.EFI esp/EFI/BOOT/
 	cp $(OVMF_VARS) ./OVMF_VARS.fd
 	qemu-system-x86_64 \
-		-m 64G \
+		-m 1G \
 		-drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
 		-drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd \
 		-drive format=raw,file=fat:rw:esp \

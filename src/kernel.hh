@@ -3,6 +3,9 @@
 #include <cstdint>
 
 
+#define EFI_SUCCESS 0
+
+
 typedef void* EFI_HANDLE;
 typedef uint64_t UINTN;
 typedef uint16_t CHAR16;
@@ -67,6 +70,7 @@ typedef enum {
 // EFI Boot Services
 typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_LOCATE_PROTOCOL) (EFI_GUID* Protocol, void* Registration, void** Interface);
 typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_GET_MEMORY_MAP) (UINTN *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap, UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
+typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_FREE_POOL) (void *Buffer);
 typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_ALLOCATE_POOL)(EFI_MEMORY_TYPE PoolType, UINTN Size, void** Buffer);
 typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_EXIT_BOOT_SERVICES) (EFI_HANDLE ImageHandle, UINTN MapKey);
 typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_STALL) (UINTN Microseconds);
@@ -171,3 +175,6 @@ typedef struct{
     void *Blt;
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL;
+
+
+

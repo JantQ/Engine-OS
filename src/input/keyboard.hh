@@ -33,10 +33,10 @@ class Keyboard {
    }
 
    static constexpr char scanCodeSet1[] = {
-   0, 0 /*Esc*/, '1','2','3','4','5','6','7','8','9','0','+', 0 /* ´ UnSupported*/, 0 /*Backspace*/,
-   0 /*Tab*/, 'q','w','e','r','t','y','u','i','o','p','\x01' /*Å*/, 0 /*¨ dead key*/, 0 /*Enter*/,
+   0, 0 /*Esc*/, '1','2','3','4','5','6','7','8','9','0','+', 0 /* ´ UnSupported*/, '\b' /*Backspace*/,
+   0 /*Tab*/, 'q','w','e','r','t','y','u','i','o','p','\x01' /*Å*/, 0 /*¨ dead key*/, '\n' /*Enter*/,
    0 /*Ctrl*/, 'a','s','d','f','g','h','j','k','l','\x03' /*Ö*/,'\x02' /*Ä*/, 0 /* ' UnSupported*/,
-   0 /*LShift*/, '<' /*ISO extra key*/, 'z','x','c','v','b','n','m',',','.','-', 0 /*RShift*/,
+   0 /*LShift*/, '\'' /*ISO extra key*/, 'z','x','c','v','b','n','m',',','.','-', 0 /*RShift*/,
    '*', 0 /*Alt*/, ' ' /*Space*/};
 
 
@@ -48,10 +48,10 @@ class Keyboard {
    '*', 0, ' '};
 
    static constexpr char scanCodeSet1AltGr[] = {
-   0,0,0,'@',0,'$',0,'{','[',']','}','\\',0,0,
+   0,0,0,'@',0,'$',0,'&','{','[',']','}','\x04',0,0,0,
    0,0,0,0,0,0,0,0,0,0,0,'~',0,0,
    0,0,0,0,0,0,0,0,0,0,0,0,0,
-   0,0,0,0,0,0,0,0,0,0,0,0,0,
+   0, '\x05','\x05',0,0,0,0,0,0,0,0,0,0,
    0,0,0};
 
 
@@ -73,7 +73,14 @@ class Keyboard {
 
       bool isRelease = raw & 0x80;
       UINT8 code = raw & 0x7F;
-      if (isRelease || code >= sizeof(scanCodeSet1)) return 0;
+
+      if (isRelease) return 0;
+
+      if (code == 0x56) {
+         return altGrPressed ? '\x05' : (shiftPressed ? '>' : '<');
+      }
+
+      if (code >= sizeof(scanCodeSet1)) return 0;
 
       char c = 0;
       if (altGrPressed && code < sizeof(scanCodeSet1AltGr)) c = scanCodeSet1AltGr[code];
@@ -81,8 +88,16 @@ class Keyboard {
       if (c == 0) c = scanCodeSet1[code];
 
       return c;
+   } 
+
+   static inline char PollChar() {
+      if (!HasScanCode()) return 0;
+      return ReadChar();
    }
 
+   static inline bool HasScanCode() {
+      return inb(PS2_STATUS_PORT) & 0x01;
+   }
    private:
 
 
