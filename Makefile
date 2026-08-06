@@ -31,13 +31,17 @@ $(BUILD_DIR)/%.o: src/%.cc $(HEADERS)
 run: BOOTX64.EFI
 	mkdir -p esp/EFI/BOOT
 	cp BOOTX64.EFI esp/EFI/BOOT/
-	cp $(OVMF_VARS) ./OVMF_VARS.fd
+	[ -f OVMF_VARS.fd ] || cp $(OVMF_VARS) ./OVMF_VARS.fd
+	[ -f disk.img ] || qemu-img create -f raw disk.img 64M
+
 	qemu-system-x86_64 \
 		-m 1G \
 		-drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
 		-drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd \
 		-drive format=raw,file=fat:rw:esp \
-		-serial stdio
+		-serial stdio \
+		-drive file=disk.img,if=none,id=nvm,format=raw \
+		-device nvme,serial=deadbeed,drive=nvm \
 
 clean:
 	rm -rf BOOTX64.EFI esp OVMF_VARS.fd $(BUILD_DIR)

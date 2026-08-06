@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../kernel.hh"
+#include "../IO/io.hh"
 
 class Clock{
     public: 
@@ -34,20 +35,10 @@ class Clock{
             return ((UINT64)hi << 32) | lo;
         }
 
-        static inline void outb(UINT16 port, UINT8 val) {
-            __asm__ __volatile__("outb %0, %1" : : "a"(val), "Nd"(port));
-        }
-        
-        static inline UINT8 inb(UINT16 port) {
-            UINT8 ret;
-            __asm__ __volatile__("inb %1, %0" : "=a"(ret) : "Nd"(port));
-            return ret;
-        }
-
         static inline UINT16 readPitCount() {
-            outb(0x43, 0x00);
-            UINT8 lo = inb(0x40);
-            UINT8 hi = inb(0x40);
+            IO::outb(0x43, 0x00);
+            UINT8 lo = IO::inb(0x40);
+            UINT8 hi = IO::inb(0x40);
             return ((UINT16)hi << 8) | lo;
         }
 

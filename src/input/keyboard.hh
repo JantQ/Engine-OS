@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../kernel.hh"
+#include "../IO/io.hh"
 
 #define PS2_DATA_PORT 0x60
 #define PS2_STATUS_PORT 0x64
@@ -17,19 +18,9 @@
 class Keyboard {
    public:
 
-   static inline UINT8 inb(UINT16 port) {
-      UINT8 result;
-      __asm__ __volatile__("inb %1, %0" : "=a"(result) : "Nd"(port));
-      return result;
-   }
-
-   static inline void outb(UINT16 port, UINT8 value) {
-      __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port));
-   }
-
    static UINT8 PS2_ReadScanCode() {
-      while (!(inb(PS2_STATUS_PORT) & 0x01)) { }
-      return inb(PS2_DATA_PORT);
+      while (!(IO::inb(PS2_STATUS_PORT) & 0x01)) { }
+      return IO::inb(PS2_DATA_PORT);
    }
 
    static constexpr char scanCodeSet1[] = {
@@ -96,7 +87,7 @@ class Keyboard {
    }
 
    static inline bool HasScanCode() {
-      return inb(PS2_STATUS_PORT) & 0x01;
+      return IO::inb(PS2_STATUS_PORT) & 0x01;
    }
    private:
 

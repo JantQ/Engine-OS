@@ -83,6 +83,14 @@ void Text::DrawUInt(Framebuffer &fb, UINT32 x, UINT32 y, UINT64 value, UINT32 sc
     }
 }
 
+void Text::DrawHex(Framebuffer &fb, UINT32 x, UINT32 y, UINT64 value, UINT32 digits, UINT32 scale, UINT32 color) {
+    const char *hex = "0123456789ABCDEF";
+    for (UINT32 i = 0; i < digits; i++) {
+        UINT32 shift = (digits - 1 - i) * 4;
+        DrawChar(fb, x + i * 8 * scale, y, hex[(value >> shift) & 0xF], scale, color);
+    }
+}
+
 static void Print(char string) {
     
 }

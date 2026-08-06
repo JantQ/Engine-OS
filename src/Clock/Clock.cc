@@ -1,26 +1,25 @@
 #include "Clock.hh"
 
-
 void Clock::StartClock() {
     const UINT32 PIT_FREQ = 1193182;
-    const UINT32 divisor = 11932;
+    const UINT16 ticks = 11932;              
 
-    outb(0x43, 0x34);
-    outb(0x40, (UINT8)(divisor & 0xFF));
-    outb(0x40, (UINT8)((divisor >> 8) & 0xFF));
+    UINT8 p61 = IO::inb(0x61);
+    IO::outb(0x61, (UINT8)((p61 & ~0x02) | 0x01));
 
-    UINT64 tsc_Start = rdtsc();
+    IO::outb(0x43, 0xB0);
+    IO::outb(0x42, (UINT8)(ticks & 0xFF));
+    IO::outb(0x42, (UINT8)(ticks >> 8));
 
-    UINT16 lsat = readPitCount();
-    UINT16 current;
+    p61 = IO::inb(0x61);
+    IO::outb(0x61, (UINT8)(p61 & ~0x01));
+    IO::outb(0x61, (UINT8)(p61 | 0x01));
 
-    do {
-        current = readPitCount();
-    } while (current <= lsat);
+    UINT64 start = rdtsc();
+    while (!(IO::inb(0x61) & 0x20)) { }         
+    UINT64 end = rdtsc();
 
-    UINT64 tsc_End = rdtsc();
-
-    double interval_seconds = (double)divisor / (double)PIT_FREQ;
-    tps = (UINT64)((double)(tsc_End - tsc_Start) / interval_seconds);
+    double seconds = (double)ticks / (double)PIT_FREQ;
+    tps = (UINT64)((double)(end - start) / seconds);
     bootTsc = rdtsc();
 }

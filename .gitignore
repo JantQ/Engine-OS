@@ -1,5 +1,6 @@
 .clangd
-BOOTX64.EFI
 settings.json
 build/
-esp/EFI/BOOT
+OVMF_VARS.fd
+BOOTX64.EFI
+esp/EFI/BOOT/BOOTX64.EFI

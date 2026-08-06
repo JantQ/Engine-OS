@@ -12,7 +12,7 @@ class Text {
 
 
         static void DrawUInt(Framebuffer &fb, UINT32 x, UINT32 y, UINT64 value, UINT32 scale = 1, UINT32 color = 0x00FFFFFF);
-
+        static void DrawHex(Framebuffer &fb, UINT32 x, UINT32 y, UINT64 value, UINT32 digits, UINT32 scale = 1, UINT32 color = 0x00FFFFFF);
         static void Print(char string);
 };
 

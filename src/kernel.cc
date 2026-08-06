@@ -5,12 +5,16 @@
 #include "Memory/Heap.hh"
 #include "Text.hh"
 #include "input/keyboard.hh"
-#include "Window/window.hh"
+#include "PCIe/pci.hh"
+#include "PCIe/storage/Nvme.hh"
 
 extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_GUID gopGuid = {0x9042a9de, 0x23dc, 0x4a38, 
         {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}};
 
+    EFI_GUID engineGuid = {0x1a2b3c4d, 0x5e6f, 0x4a7b,
+        {0x8c, 0x9d, 0xa0, 0xb1, 0xc2, 0xd3, 0xe4, 0xf4}};
+    
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = 0;
     SystemTable->BootServices->LocateProtocol(&gopGuid, 0, (void**)&gop);
     SystemTable->ConOut->Reset(SystemTable->ConOut, true);
@@ -48,15 +52,27 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     EFI_STATUS MemoryStatus = SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
 
-        
+    /*
+    UINT32 bootCount = 0;
+    UINTN size = sizeof(bootCount);
 
+    EFI_STATUS getStatus = SystemTable->RuntimeServices->getVariable((CHAR16*)L"BootCount", &engineGuid, 0, &size, &bootCount);
+    
+    bootCount++;
+
+    EFI_STATUS setStatus = SystemTable->RuntimeServices->SetVariable((CHAR16*)L"BootCount", &engineGuid, 0x07, sizeof(bootCount), &bootCount);
+    */
     // EXIT UEFI
     
     EFI_STATUS BootStatus = SystemTable->BootServices->ExitBootServices(ImageHandle ,mapKey);
     Heap::Init(memoryMap, mapSize, descriptorSize);
     Clock::StartClock();
+    Pci::Scan();
 
+    Text::DrawString(Graphics::back, 0, 0, "Waiting for NVME!");
 
+    PciDevice *nvme = Pci::FindClass(0x01, 0X08);
+    bool nvmeOk = Nvme::Init(nvme);
 
     UINT64 lastTick = Clock::rdtsc();
 
@@ -114,6 +130,21 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
         for (int i = 0; debugInfo[i] != '\0'; i++) {
             Text::DrawChar(Graphics::back, i * 16 + 96, 32, debugInfo[i], 2);
         }
+
+        Text::DrawUInt(Graphics::back, 80, 0, Clock::Millis());
+
+        // Text::DrawUInt(Graphics::back, 500, 500, bootCount);
+
+        Text::DrawHex(Graphics::back, 0, 160, Pci::Read32(nvme->bus, nvme->device, nvme->func, 0x08), 8);
+        Text::DrawHex(Graphics::back, 0, 180, nvme->vendorID, 4);
+
+        Text::DrawHex(Graphics::back, 0, 200, Nvme::bar0, 16);
+        Text::DrawHex(Graphics::back, 0, 220, Nvme::Read32(NVME_VS), 8);
+        Text::DrawHex(Graphics::back, 0, 240, Nvme::Read64(NVME_CAP), 16);
+
+        Text::DrawHex(Graphics::back, 0, 260, Nvme::Read32(NVME_CSTS), 8);
+        Text::DrawHex(Graphics::back, 0, 280, Nvme::Read32(NVME_CC),   8);
+        Text::DrawHex(Graphics::back, 0, 300, nvmeOk ? 1 : 0,          1);
 
         Graphics::PresentFrame();
     }

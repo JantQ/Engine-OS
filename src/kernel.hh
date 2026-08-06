@@ -129,6 +129,22 @@ typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL{
   EFI_TEXT_ENABLE_CURSOR EnableCursor;
 } EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 
+// Storage
+
+typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_GET_VARIABLE) (CHAR16 *VariableName, EFI_GUID *VendorGuid, UINT32 *Attributes, UINTN *DataSize, void *Data);
+typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_SET_VARIABLE) (CHAR16 *VariableName, EFI_GUID *VendorGuid, UINT32 Attrbiutes, UINTN DataSize, void *Data);
+typedef EFI_STATUS (__attribute__((ms_abi)) *EFI_RESET_SYSTEM) (UINT32 ResetType, EFI_STATUS ResetStatus, UINTN DataSize, void *ResetData);
+
+typedef struct{
+    EFI_TABLE_HEADER Hdr;
+    void *pad[6];
+    EFI_GET_VARIABLE getVariable;
+    void *GetNextVariableName;
+    EFI_SET_VARIABLE SetVariable;
+    void *GetNextHighMonotonicCount;
+    EFI_RESET_SYSTEM ResetSystem;
+} EFI_RUNTIME_SERVICES;
+
 
 // System Table
 typedef struct{
@@ -141,7 +157,7 @@ typedef struct{
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
     EFI_HANDLE StandardErrorHandle;
     void *StdErr;
-    void *RuntimeServices;
+    EFI_RUNTIME_SERVICES *RuntimeServices;
     EFI_BOOT_SERVICES *BootServices;
     UINTN NumberOfTableEntries;
     void *ConfigurationTable;
@@ -175,6 +191,4 @@ typedef struct{
     void *Blt;
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL;
-
-
 
