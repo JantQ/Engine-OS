@@ -71,8 +71,56 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     Text::DrawString(Graphics::back, 0, 0, "Waiting for NVME!");
 
+
     PciDevice *nvme = Pci::FindClass(0x01, 0X08);
     bool nvmeOk = Nvme::Init(nvme);
+
+    UINT8 *idBuf = (UINT8*)Heap::Alloc(4096, 4096);
+    UINT8 *dataBuf = (UINT8*)Heap::Alloc(4096, 4096);
+
+    char model[41] = {0};
+    UINT32 nsid = 0;
+    UINT64 nsze = 0;
+    UINT32 blockSize = 0;
+    bool ioOk = false;
+    UINT16 readSt = 0xFFFF;
+    UINT16 writeSt = 0xFFFF;
+
+    if (nvmeOk) {
+        if (Nvme::Identify(0x01, 0, idBuf)) {
+            for (int i = 0; i < 40; i++) {
+                model[i] = (char)idBuf[24 + i];
+            }
+            model[40] = '\0';
+        }
+
+        if (Nvme::Identify(0x02, 0, idBuf)) {
+            nsid = *(UINT32*)idBuf;
+        }
+
+        if (nsid && Nvme::Identify(0x00, nsid, idBuf)) {
+            nsze = *(UINT64*)idBuf;
+            UINT8 flbas = idBuf[26] & 0x0F;
+            UINT32 lbaf = *(UINT32*)(idBuf + 128 + flbas * 4);
+            blockSize = 1u << ((lbaf >> 16) & 0xFF);
+        }
+
+        ioOk = Nvme::CreateIoQueues();
+
+        if (ioOk && nsid) {
+            for (int i = 0; i < 512; i++) {
+                dataBuf[i] = (UINT8)i;
+            }
+            writeSt = Nvme::WriteBlocks(nsid, 100, 1, dataBuf);
+
+            for (int i = 0; i < 512; i++) {
+                dataBuf[i] = 0xEE;
+            }
+            readSt = Nvme::ReadBlocks(nsid, 100, 1, dataBuf);
+        }
+    }
+    
+
 
     UINT64 lastTick = Clock::rdtsc();
 
@@ -146,6 +194,20 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
         Text::DrawHex(Graphics::back, 0, 280, Nvme::Read32(NVME_CC),   8);
         Text::DrawHex(Graphics::back, 0, 300, nvmeOk ? 1 : 0,          1);
 
+        Text::DrawString(Graphics::back, 0, 320, model, 2);
+        Text::DrawUInt(Graphics::back, 0, 340, nsid);
+        Text::DrawUInt(Graphics::back, 0, 350, nsze);
+        Text::DrawUInt(Graphics::back, 0, 360, blockSize);
+        Text::DrawHex(Graphics::back, 0, 370, ioOk ? 1 : 0, 1);
+        Text::DrawHex(Graphics::back, 0, 380, readSt, 4);
+        Text::DrawHex(Graphics::back, 0, 390, writeSt, 4);
+
+        for (UINT32 row = 0; row < 8; row++) {
+            for (UINT32 b = 0; b < 16; b++) {
+                Text::DrawHex(Graphics::back, 300 + b * 24, 400 + row * 20, dataBuf[row * 16 + b], 2);
+            }
+        }
+        
         Graphics::PresentFrame();
     }
     return 0;
