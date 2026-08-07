@@ -7,6 +7,8 @@
 #include "input/keyboard.hh"
 #include "PCIe/pci.hh"
 #include "PCIe/storage/Nvme.hh"
+#include "shell/Shell.hh"
+#include "Libs/Crc.hh"
 
 extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_GUID gopGuid = {0x9042a9de, 0x23dc, 0x4a38, 
@@ -74,51 +76,8 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     PciDevice *nvme = Pci::FindClass(0x01, 0X08);
     bool nvmeOk = Nvme::Init(nvme);
-
-    UINT8 *idBuf = (UINT8*)Heap::Alloc(4096, 4096);
-    UINT8 *dataBuf = (UINT8*)Heap::Alloc(4096, 4096);
-
-    char model[41] = {0};
-    UINT32 nsid = 0;
-    UINT64 nsze = 0;
-    UINT32 blockSize = 0;
-    bool ioOk = false;
-    UINT16 readSt = 0xFFFF;
-    UINT16 writeSt = 0xFFFF;
-
-    if (nvmeOk) {
-        if (Nvme::Identify(0x01, 0, idBuf)) {
-            for (int i = 0; i < 40; i++) {
-                model[i] = (char)idBuf[24 + i];
-            }
-            model[40] = '\0';
-        }
-
-        if (Nvme::Identify(0x02, 0, idBuf)) {
-            nsid = *(UINT32*)idBuf;
-        }
-
-        if (nsid && Nvme::Identify(0x00, nsid, idBuf)) {
-            nsze = *(UINT64*)idBuf;
-            UINT8 flbas = idBuf[26] & 0x0F;
-            UINT32 lbaf = *(UINT32*)(idBuf + 128 + flbas * 4);
-            blockSize = 1u << ((lbaf >> 16) & 0xFF);
-        }
-
-        ioOk = Nvme::CreateIoQueues();
-
-        if (ioOk && nsid) {
-            for (int i = 0; i < 512; i++) {
-                dataBuf[i] = (UINT8)i;
-            }
-            writeSt = Nvme::WriteBlocks(nsid, 100, 1, dataBuf);
-
-            for (int i = 0; i < 512; i++) {
-                dataBuf[i] = 0xEE;
-            }
-            readSt = Nvme::ReadBlocks(nsid, 100, 1, dataBuf);
-        }
-    }
+    bool idOk = nvmeOk && Nvme::IdentifyAll();
+    bool ioOk = idOk && Nvme::CreateIoQueues();
     
 
 
@@ -136,7 +95,9 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
         char c = Keyboard::PollChar();
 
-        if (c != 0) {
+        if (c == '\n') {
+            Shell::Execute(Console::CurrentLine());
+        } else if (c != 0) {
             Console::Print(c);
         }
 
@@ -182,7 +143,7 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
         Text::DrawUInt(Graphics::back, 80, 0, Clock::Millis());
 
         // Text::DrawUInt(Graphics::back, 500, 500, bootCount);
-
+        /*
         Text::DrawHex(Graphics::back, 0, 160, Pci::Read32(nvme->bus, nvme->device, nvme->func, 0x08), 8);
         Text::DrawHex(Graphics::back, 0, 180, nvme->vendorID, 4);
 
@@ -207,7 +168,7 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
                 Text::DrawHex(Graphics::back, 300 + b * 24, 400 + row * 20, dataBuf[row * 16 + b], 2);
             }
         }
-        
+        */
         Graphics::PresentFrame();
     }
     return 0;

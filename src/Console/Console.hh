@@ -8,6 +8,18 @@ class Console {
         static const UINT32 MAX_COLS = 128;
 
         static void Print(char c);
+        static void Print(const char *str);
+
+        static void Println(char c);
+        static void Println(const char *str);
+
+        static void PrintUInt(UINT64 value);
+
+        static void PrintHex(UINT64 value, UINT32 digits);
+
+        static const char *CurrentLine() {
+            return lines[lineCount - 1];
+        }
 
         static void Clear();
 

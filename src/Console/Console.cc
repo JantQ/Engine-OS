@@ -38,6 +38,47 @@ void Console::Print(char c) {
     lines[lineCount - 1][col] = '\0';
 }
 
+void Console::Print(const char *str) {
+    while (*str) {
+        Print(*str++);
+    }
+}
+
+void Console::Println(char c) {
+    Print(c);
+    Print('\n');
+}
+
+void Console::Println(const char *str) {
+    Print(str);
+    Print('\n');
+}
+
+void Console::PrintUInt(UINT64 value) {
+    if (value == 0) {
+        Print('0');
+        return;
+    }
+
+    char buffer[21];
+    UINT32 i = 0;
+    while (value > 0) {
+        buffer[i++] = '0' + (char)(value % 10);
+        value /= 10;
+    }
+    while (i > 0) {
+        Print(buffer[--i]);
+    }
+}
+
+
+void Console::PrintHex(UINT64 value, UINT32 digits) {
+    const char *hex = "0123456789ABCDEF";
+    for (UINT32 i = 0; i < digits; i++) {
+        Print(hex[(value >> ((digits - 1- i) * 4)) & 0xF]);
+    }
+}
+
 void Console::Clear() {
     for (UINT32 i = 0; i < MAX_LINE; i++) {
         lines[i][0] = '\0';

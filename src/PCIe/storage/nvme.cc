@@ -169,6 +169,33 @@ bool Nvme::WriteBlocks(UINT32 nsid, UINT64 lba, UINT16 count, void *buffer) {
     return Submit(io, cmd) == 0;
 }
 
+bool Nvme::IdentifyAll() {
+    UINT8 *idBuffer = (UINT8*)Heap::Alloc(4096, 4096);
+    if (!idBuffer) return false;
+
+    if (!Identify(0x01, 0, idBuffer)) return false;
+    for (UINT32 i = 0; i < 40; i++) {
+        model[i] = (char)idBuffer[24 + i];
+    }
+
+    UINT32 end = 40;
+    while (end > 0 && model[end - 1] == ' ') end--;
+    model[end] = '\0';
+
+    if (!Identify(0x02, 0, idBuffer)) return false;
+    nsid = *(UINT32*)idBuffer;
+    if (nsid == 0) return false;
+
+    if (!Identify(0x00, nsid, idBuffer)) return false;
+    nsze = *(UINT64*)idBuffer;
+
+    UINT8 flbas = idBuffer[26] & 0x0F;
+    UINT32 lbaf = *(UINT32*)(idBuffer + 128 + flbas * 4);
+    blockSize = 1u << ((lbaf >> 16) & 0xFF);
+    
+    return true;
+}
+
 bool Nvme::WaitReady(bool wantReady, UINT64 timeoutMs) {
     UINT64 deadline = Clock::Millis() + timeoutMs;
     while (Clock::Millis() < deadline) {

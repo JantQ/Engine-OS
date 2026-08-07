@@ -21,7 +21,9 @@ struct NvmeQueue {
     UINT32 qid, sqTail, cqHead, phase, entries;
 };
 
-
+static constexpr UINT64 KiB = 1024;
+static constexpr UINT64 MiB = 1024 * 1024;
+static constexpr UINT64 GiB = 1024 * 1024 * 1024;
 
 class Nvme {
     public:
@@ -39,6 +41,11 @@ class Nvme {
         static inline UINT8 *asq = 0;
         static inline UINT8 *acq = 0;
 
+        static inline UINT32 nsid = 0;
+        static inline UINT64 nsze = 0;
+        static inline UINT32 blockSize = 0;
+        static inline char model[41] = {0};
+
 
         static bool Init(PciDevice *device);
         static UINT16 submitAdmin(UINT32 *cmd);
@@ -47,6 +54,7 @@ class Nvme {
         static bool CreateIoQueues();
         static bool ReadBlocks(UINT32 nsid, UINT64 lba, UINT16 count, void *buffer);
         static bool WriteBlocks(UINT32 nsid, UINT64 lba, UINT16 count, void *buffer);
+        static bool IdentifyAll();
 
         static inline UINT32 Read32(UINT32 offset) {
             return *(volatile UINT32*)(bar0 + offset);
