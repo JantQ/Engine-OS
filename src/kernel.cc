@@ -8,7 +8,6 @@
 #include "PCIe/pci.hh"
 #include "PCIe/storage/Nvme.hh"
 #include "shell/Shell.hh"
-#include "Libs/Crc.hh"
 
 extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_GUID gopGuid = {0x9042a9de, 0x23dc, 0x4a38, 
@@ -87,7 +86,7 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
     UINT64 flashDelay = 500;
     bool showCurrentLine = true;
 
-    
+    bool showPartTable = false;
 
     while (1) {
         Graphics::back.clear(0x00000000);
@@ -169,6 +168,12 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
             }
         }
         */
+
+        if (now >= 5000 && showPartTable == false) {
+            Shell::Execute("parts");
+            showPartTable = true;
+        }
+
         Graphics::PresentFrame();
     }
     return 0;

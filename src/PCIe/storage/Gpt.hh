@@ -38,6 +38,13 @@ enum GptResult {
     GPT_BAD_CRC,
     GPT_BAD_ENTRY_SIZE,
     GPT_ENTRY_READ_FAILED,
+    GPT_RANGE_INVALID,
+    GPT_RANGE_OVERLAP,
+    GPT_ARRAY_TOO_BIG,
+    GPT_BAD_ENTRY_CRC,
+    GPT_NO_FREE_SLOT,
+    GPT_NO_RANDOM,
+    GPT_WRITE_FAILED,
 };
 
 class Gpt {
@@ -45,12 +52,15 @@ class Gpt {
         static constexpr UINT32 MAX_PARTS = 32;
 
         static inline bool valid = false;
+        static inline bool truncated = false;
         static inline UINT32 count = 0;
         static inline UINT64 firstUsable = 0;
         static inline UINT64 lastUsable = 0;
         static inline GptEntry parts[MAX_PARTS];
+        static inline GptHeader hdr;
 
         static GptResult Parse();
+        static GptResult CreatePartition(UINT64 startLba, UINT64 endLba, const UINT8 *typeGuid, const char *name);
 
         static const char *ResultName(GptResult result) {
             switch (result) {
@@ -63,6 +73,12 @@ class Gpt {
                 case GPT_BAD_CRC: return "bad header crc";
                 case GPT_BAD_ENTRY_SIZE: return "bad entry size";
                 case GPT_ENTRY_READ_FAILED: return "entry read failed";
+                case GPT_RANGE_INVALID: return "invalid range";
+                case GPT_ARRAY_TOO_BIG: return "array too big";
+                case GPT_BAD_ENTRY_CRC: return "bad entry crc";
+                case GPT_NO_FREE_SLOT: return "no free slot";
+                case GPT_NO_RANDOM: return "no random";
+                case GPT_WRITE_FAILED: return "write failed";
             }
             return "unknown";
         }

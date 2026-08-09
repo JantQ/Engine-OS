@@ -4,3 +4,4 @@ build/
 OVMF_VARS.fd
 BOOTX64.EFI
 esp/EFI/BOOT/BOOTX64.EFI
+disk.img
