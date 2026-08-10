@@ -4,15 +4,13 @@
 #include "../PCIe/storage/Nvme.hh"
 #include "../Memory/Heap.hh"
 #include "../PCIe/storage/Gpt.hh"
+#include "../PCIe/storage/part.hh"
+#include "../Editor/Editor.hh"
+#include "../FileSystem/EnFS.hh"
 
 static UINT8 *sectorBuffer = 0;
+static UINT8 *partBuffer = 0;
 
-static const UINT8 ENGINE_TYPE_GUID[16] = {
-    0x4D, 0x3C, 0x2B, 0x1A,
-    0x6F, 0x5E,
-    0x7B, 0x4A, 
-    0x8C, 0x9D, 0xA0, 0xB1, 0xC2, 0xD3, 0xE4, 0xF4
-};
 
 void Shell::Execute(const char *line) {
     while (*line == ' ') line++;
@@ -289,6 +287,145 @@ static void CmdMkpart(const char *args) {
     Console::Println((Gpt::ResultName(result)));
 }
 
+static void CmdMount(const char *) {
+    if (!Part::Mount(ENGINE_TYPE_GUID)) {
+        Console::Println("no engine partition");
+        return;
+    }
+
+    Console::Print("mounted lba ");
+    Console::PrintUInt(Part::baseLba);
+    Console::Print(" size ");
+    Console::PrintUInt(Part::SizeBytes() / MiB);
+    Console::Println("M");
+}
+
+static void CmdPartRead(const char *args) {
+    if (!partBuffer) partBuffer = (UINT8*)Heap::Alloc(4096, 4096);
+    if (!partBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    UINT64 offset = Str::ToUInt(args);
+
+    if (!Part::Read(offset, 1, partBuffer)) {
+        Console::Println("read failed");
+        return;
+    }
+
+    for (UINT32 row = 0; row < 8; row++) {
+        Console::PrintHex(row * 16, 4);
+        Console::Print(" ");
+        for (UINT32 b = 0; b < 16; b++) {
+            Console::PrintHex(partBuffer[row * 16 + b], 2);
+            Console::Print(' ');
+        }
+        Console::Print('\n');
+    }
+}
+
+static void CmdPartWrite(const char *args) {
+    if (!partBuffer) partBuffer = (UINT8*)Heap::Alloc(4096, 4096);
+    if (!partBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    UINT64 offset = Str::ToUInt(args);
+    while (*args >= '0' && *args <= '9') args++;
+    while (*args == ' ') args++;
+
+    for (UINT32 i = 0; i < Nvme::blockSize; i++) {
+        partBuffer[i] = 0;
+    }
+    
+    for (UINT32 i = 0; args[i] && i < Nvme::blockSize - 1; i++) {
+        partBuffer[i] = (UINT8)args[i];
+    }
+
+    Console::Println(Part::Write(offset, 1, partBuffer) ? "ok" : "write failed");
+}
+
+static void CmdWipe(const char *args) {
+    if (!Part::mounted) {
+        Console::Println("not mounted");
+        return;
+    }
+
+    Console::Print("will zero ");
+    Console::PrintUInt(Part::sectors);
+    Console::Print(" sectors (");
+    Console::PrintUInt(Part::SizeBytes() / MiB);
+    Console::Print("M) at lba ");
+    Console::PrintUInt(Part::baseLba);
+    Console::Print('\n');
+
+    if (!Str::Equal(args, "--yes")) {
+        Console::Println("Add --yes to erase");
+        return;
+    }
+
+    bool ok = Part::Zero(0, Part::sectors);
+    Console::Println(ok ? "partition wiped" : "wipe failed");
+}
+
+static void CmdEditor(const char *args) {
+    if (!EnFS::mounted) {
+        Console::Println("enfs not mounted"); 
+        return;
+    }
+    if (!*args) {
+        Console::Println("usage: neenor <name>"); 
+        return;
+    }
+    Editor::Open(args);
+}
+
+static void CmdFormat(const char *args) {
+    if (!Part::mounted) {
+        Console::Println("no partition mounted");
+        return;
+    }
+
+    if (!Str::Equal(args, "--yes")) {
+        Console::Print("will erase all files on ");
+        Console::PrintUInt(Part::SizeBytes() / MiB);
+        Console::Println("M - add --yes to commit");
+        return;
+    }
+
+    EnFsResult r = EnFS::Format();
+    Console::Print("format: ");
+    Console::Println(EnFS::ResultName(r));
+}
+
+static void CmdLs(const char *) {
+    if (!EnFS::mounted) {
+        Console::Println("enfs not mounted");
+        return;
+    }
+
+    UINT32 shown = 0;
+    for (UINT32 i = 0; i < ENFS_MAX_FILES; i++) {
+        if (EnFS::files[i].flags != ENFS_USED) continue;
+
+        Console::Print(EnFS::files[i].name);
+        Console::Print("  ");
+        Console::PrintUInt(EnFS::files[i].byteLenght);
+        Console::Println(" bytes");
+        shown++;
+    }
+
+    if (shown == 0) Console::Println("no files");
+
+    Console::Print("used ");
+    Console::PrintUInt(EnFS::super.dataUsed * Part::BlockSize() / MiB);
+    Console::Print("M of ");
+    Console::PrintUInt(Part::SizeBytes() / MiB);
+    Console::Println("M");
+}
+
 const Command Shell::commands[] = {
     {"help", "list commands", CmdHelp},
     {"clear", "clear the terminal", CmdClear},
@@ -297,6 +434,13 @@ const Command Shell::commands[] = {
     {"parts", "shows system partitions", CmdGpt},
     {"free", "show unnallocated space", CmdFree},
     {"mkpart", "mkpart <sizeMiB> <name> [--yes]", CmdMkpart},
+    {"mount", "mount the engine partition", CmdMount},
+    {"partread", "partread <sector> within partition", CmdPartRead},
+    {"partwrite", "partwrite <sector> <text>", CmdPartWrite},
+    {"wipepart", "wipepart [--yes]. Zero all partitions", CmdWipe},
+    {"neenor", "neenor <name>", CmdEditor},
+    {"format", "format [--yes] create an enfs volume", CmdFormat},
+    {"ls", "list files", CmdLs},
 
 };
 

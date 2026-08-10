@@ -24,4 +24,14 @@ class IO {
         static inline void outl(UINT16 port, UINT32 value) {
             __asm__ __volatile__("outl %0, %1" : : "a"(value), "Nd"(port));
         }
+
+        static inline UINT64 ReadMsr(UINT32 msr) {
+            UINT32 lo, hi;
+            __asm__ __volatile__("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+            return ((UINT64)hi << 32) | lo;
+        }
+
+        static inline void WriteMsr(UINT32 msr, UINT64 value) {
+            __asm__ __volatile__("wrmsr" :: "c"(msr), "a"((UINT32)value), "d"((UINT32)(value >> 32)));
+        }
 };

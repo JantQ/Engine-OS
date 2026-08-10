@@ -12,8 +12,22 @@
 #define SC_RSHIFT_MAKE  0x36
 #define SC_RSHIFT_BREAK 0xB6
 #define SC_EXTENDED     0xE0
-#define SC_ALTGR_MAKE   0x38 
-#define SC_ALTGR_BREAK  0xB8  
+#define SC_ALTGR_MAKE   0x38
+#define SC_ALTGR_BREAK  0xB8
+#define SC_LCTRL_MAKE   0x1D
+#define SC_LCTRL_BREAK  0x9D
+
+#define KEY_UP      0x100
+#define KEY_DOWN    0x101
+#define KEY_LEFT    0x102
+#define KEY_RIGHT   0x103
+#define KEY_HOME    0x104
+#define KEY_END     0x105
+#define KEY_DELETE  0x106
+#define KEY_ESC     0x107
+#define KEY_CTRL_S  0x108
+#define KEY_CTRL_Q  0x109
+
 
 class Keyboard {
    public:
@@ -48,43 +62,20 @@ class Keyboard {
 
    static inline bool shiftPressed = false;
    static inline bool altGrPressed = false;
+   static inline bool ctrlPressed = false;
 
-   static inline char ReadChar() {
-      UINT8 raw = PS2_ReadScanCode();
+   static UINT16 ReadKey();
 
-      if (raw == SC_EXTENDED) {
-         UINT8 ext = PS2_ReadScanCode();
-         if (ext == SC_ALTGR_MAKE)  { altGrPressed = true;  return 0; }
-         if (ext == SC_ALTGR_BREAK) { altGrPressed = false; return 0; }
-         return 0;
-      }
-
-      if (raw == SC_LSHIFT_MAKE || raw == SC_RSHIFT_MAKE)   { shiftPressed = true;  return 0; }
-      if (raw == SC_LSHIFT_BREAK || raw == SC_RSHIFT_BREAK) { shiftPressed = false; return 0; }
-
-      bool isRelease = raw & 0x80;
-      UINT8 code = raw & 0x7F;
-
-      if (isRelease) return 0;
-
-      if (code == 0x56) {
-         return altGrPressed ? '\x05' : (shiftPressed ? '>' : '<');
-      }
-
-      if (code >= sizeof(scanCodeSet1)) return 0;
-
-      char c = 0;
-      if (altGrPressed && code < sizeof(scanCodeSet1AltGr)) c = scanCodeSet1AltGr[code];
-      if (c == 0 && shiftPressed) c = scanCodeSet1Shift[code];
-      if (c == 0) c = scanCodeSet1[code];
-
-      return c;
-   } 
-
-   static inline char PollChar() {
+   static inline UINT16 PollKey() {
       if (!HasScanCode()) return 0;
-      return ReadChar();
+      return ReadKey();
+   }  
+   
+   static inline char PollChar() {
+      UINT16 key = PollKey();
+      return key < 0x100 ? (char)key : 0;
    }
+
 
    static inline bool HasScanCode() {
       return IO::inb(PS2_STATUS_PORT) & 0x01;

@@ -21,4 +21,13 @@ in love with OS development. So i decided why not make something like this. It
 doesnt really have any real life usecases but you know... Its always something for
 the coveted Portfolio.
 
-I think ill leave this as Open-Source... possibly and maybe.
+I think ill leave this as Open-Source... possibly and maybe. 
+
+Yes i'll leave it as Open-Sauzee. I don't reall know why am i always yapping in these 
+comments and this readme since i know noone is going to read this version cause you know. 
+Since it is completely unusable as an OS. I mean one could technically use it to write 
+something since we have editor "window" that we can use to write shit into files properly 
+and save it. But i mean i've come to the conclusion that i will make the games have a other
+kernel blob that i will link them into. so basically its same as the engine but just 
+without the main engine things like code editors and shi like that. maybe some of the 
+methods and shi!

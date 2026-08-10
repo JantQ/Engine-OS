@@ -1,7 +1,7 @@
 CC = x86_64-w64-mingw32-gcc
 CXX = x86_64-w64-mingw32-g++
 CFLAGS = -ffreestanding -fshort-wchar -mno-red-zone
-CXXFLAGS = -ffreestanding -fshort-wchar -mno-red-zone -fno-exceptions -fno-rtti
+CXXFLAGS = -ffreestanding -fshort-wchar -mno-red-zone -fno-exceptions -fno-rtti -Wall -Wextra -O2 -Wshadow
 LDFLAGS = -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 -e init_kernel
 
 OVMF_CODE = /usr/share/edk2/x64/OVMF_CODE.4m.fd
@@ -36,12 +36,18 @@ run: BOOTX64.EFI
 
 	qemu-system-x86_64 \
 		-m 1G \
+		-cpu max \
 		-drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
 		-drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd \
 		-drive format=raw,file=fat:rw:esp \
 		-serial stdio \
 		-drive file=disk.img,if=none,id=nvm,format=raw \
 		-device nvme,serial=deadbeed,drive=nvm \
+
+disk:
+	rm -f disk.img
+	qemu-img create -f raw disk.img 1G
+	echo 'label: gpt' | sfdisk disk.img
 
 clean:
 	rm -rf BOOTX64.EFI esp OVMF_VARS.fd $(BUILD_DIR)
