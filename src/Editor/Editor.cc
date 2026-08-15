@@ -116,8 +116,8 @@ void Editor::JoinLine() {
     for (UINT32 l = curLine; l + 1 < lineCount; l++) {
         for (UINT32 i = 0; i < lengths[l + 1]; i++) {
             lines[l][i] = lines[l + 1][i];
-            lengths[l] = lengths[l + 1];
         }
+        lengths[l] = lengths[l + 1];
     }
 
     lineCount--;
@@ -198,7 +198,7 @@ void Editor::Update(UINT16 key) {
             }
             lengths[curLine] = lentgh - 1;
             dirty = true;
-        } else if (curCol + 1 < lineCount) {
+        } else if (curLine + 1 < lineCount) {
             curLine++;
             JoinLine();
         }

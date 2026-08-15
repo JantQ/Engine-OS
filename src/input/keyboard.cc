@@ -52,4 +52,35 @@ UINT16 Keyboard::ReadKey() {
     if (c == 0) c = scanCodeSet1[code];
 
     return (UINT16)(UINT8)c;
-} 
+}
+
+void Keyboard::PumpState() {
+    while (HasScanCode()) {
+        UINT8 raw = PS2_ReadScanCode();
+        bool extended = false;
+
+        if (raw == SC_EXTENDED) {
+            raw = PS2_ReadScanCode();
+            extended = true;
+        }
+
+        bool released = raw & 0x80;
+        UINT8 code = raw & 0x7F;
+        UINT16 key = 0;
+
+        if (extended) {
+            switch (code) {
+                case 0x48: key = KEY_UP; break;
+                case 0x50: key = KEY_DOWN; break;
+                case 0x4B: key = KEY_LEFT; break;
+                case 0x4D: key = KEY_RIGHT; break;
+            }
+        } else if (code == 0x01) {
+            key = KEY_ESC;
+        } else if (code < sizeof(scanCodeSet1)) {
+            key = (UINT16)(UINT8)scanCodeSet1[code];
+        }
+
+        if (key) keysDown[key] = !released;
+    }
+}

@@ -28,6 +28,8 @@
 #define KEY_CTRL_S  0x108
 #define KEY_CTRL_Q  0x109
 
+#define KEY_STATE_COUNT 0x110
+
 
 class Keyboard {
    public:
@@ -80,6 +82,18 @@ class Keyboard {
    static inline bool HasScanCode() {
       return IO::inb(PS2_STATUS_PORT) & 0x01;
    }
+
+   static void PumpState();
+
+   static inline bool IsDown(UINT16 key) {
+      return key < KEY_STATE_COUNT ? keysDown[key] : false;
+   }
+
+   static inline void ClearStates() {
+      for (UINT32 i = 0; i < KEY_STATE_COUNT; i++) keysDown[i] = false;
+   }
+
+   static inline bool keysDown[KEY_STATE_COUNT] = {};
    private:
 
 

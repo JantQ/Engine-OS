@@ -16,6 +16,7 @@ typedef uint64_t EFI_STATUS;
 typedef uint64_t UINT64;
 
 typedef int32_t INT32;
+typedef int64_t INT64;
 
 typedef struct{
     UINT32 Data1;

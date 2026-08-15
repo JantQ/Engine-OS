@@ -7,9 +7,15 @@
 #include "../PCIe/storage/part.hh"
 #include "../Editor/Editor.hh"
 #include "../FileSystem/EnFS.hh"
+#include "../Script/Script.hh"
+
+extern "C" UINT8 _binary_RUNTIME_EFI_start[];
+extern "C" UINT8 _binary_RUNTIME_EFI_end[];
 
 static UINT8 *sectorBuffer = 0;
 static UINT8 *partBuffer = 0;
+static UINT8 *scriptBuffer = 0;
+static UINT8 *exportBuffer = 0;
 
 
 void Shell::Execute(const char *line) {
@@ -426,6 +432,228 @@ static void CmdLs(const char *) {
     Console::Println("M");
 }
 
+#define RM_MAX_NAMES 16
+
+static void CmdRm(const char *args) {
+    if (!EnFS::mounted) {
+        Console::Println("enfs not mounted");
+        return;
+    }
+
+    char names[RM_MAX_NAMES][ENFS_NAME_LENGHT];
+    UINT32 nameCount = 0;
+    bool confirmed = false;
+    bool frfr = false;
+
+    while (*args) {
+        while (*args == ' ') args++;
+        if (!*args) break;
+
+        char token[ENFS_NAME_LENGHT];
+        UINT32 n = 0;
+
+        if (*args == '"') {
+            args++;
+            while (*args && *args != '"' && n < ENFS_NAME_LENGHT - 1) token[n++] = *args++;
+            if (*args == '"') args++;
+        } else {
+            while (*args && *args != ' ' && n < ENFS_NAME_LENGHT - 1) token[n++] = *args++;
+        }
+        token[n] = '\0';
+
+        if (n == 0) continue;
+
+        if (Str::Equal(token, "--yes")) {
+            confirmed = true;
+            continue;
+        }
+
+        if (Str::Equal(token, "--frfr")) {
+            frfr = true;
+            continue;
+        }
+
+        if (nameCount >= RM_MAX_NAMES) {
+            Console::Println("too many files, max 16");
+            return;
+        }
+
+        for (UINT32 i = 0; i <= n; i++) names[nameCount][i] = token[i];
+        nameCount++;
+    }
+
+    if (nameCount == 0) {
+        Console::Println("usage: rm <name> [<name> ...] --yes [--frfr]");
+        return;
+    }
+
+    if (!confirmed) {
+        Console::Print(frfr ? "will delete and wipe " : "will delete ");
+        for (UINT32 i = 0; i < nameCount; i++) {
+            Console::Print(names[i]);
+            Console::Print(EnFS::Find(names[i]) ? "" : " (not found)");
+            if (i + 1 < nameCount) Console::Print(", ");
+        }
+        Console::Print('\n');
+        Console::Println("add --yes to delete");
+        return;
+    }
+
+    for (UINT32 i = 0; i < nameCount; i++) {
+        if (frfr) {
+            EnFsEntry *entry = EnFS::Find(names[i]);
+            if (entry) {
+                UINT32 blockSize = EnFS::super.blockSize;
+                UINT64 secs = (entry->byteLenght + blockSize - 1) / blockSize;
+                if (secs == 0) secs = 1;
+
+                if (!Part::Zero(entry->startSector, secs)) {
+                    Console::Print("rm ");
+                    Console::Print(names[i]);
+                    Console::Println(": wipe failed");
+                    continue;
+                }
+            }
+        }
+
+        EnFsResult r = EnFS::Remove(names[i]);
+        Console::Print("rm ");
+        Console::Print(names[i]);
+        Console::Print(": ");
+        Console::Println(EnFS::ResultName(r));
+    }
+}
+
+static void CmdPlay(const char *args) {
+    if (!EnFS::mounted) {
+        Console::Println("enfs not mounted");
+        return;
+    }
+    if (!*args) {
+        Console::Println("usage: play <script>");
+        return;
+    }
+
+    if (!scriptBuffer) scriptBuffer = (UINT8*)Heap::Alloc(SCRIPT_MAX_SOURCE, 16);
+    if (!scriptBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    UINT64 lenght = 0;
+    EnFsResult r = EnFS::ReadFile(args, scriptBuffer, SCRIPT_MAX_SOURCE, &lenght);
+    if (r != ENFS_OK) {
+        Console::Print("play: ");
+        Console::Println(EnFS::ResultName(r));
+        return;
+    }
+
+    INT32 badLine = Script::Load((const char*)scriptBuffer, lenght);
+    if (badLine >= 0) {
+        Console::Print("bad script line ");
+        Console::PrintUInt((UINT64)badLine);
+        Console::Print('\n');
+        return;
+    }
+
+    Script::RunLoop(true);
+    Console::Println("game ended");
+}
+
+static UINT8 *FindGameMagic(UINT8 *blob, UINT64 size) {
+    if (size < GAME_HEADER_BYTES + SCRIPT_MAX_SOURCE) return 0;
+
+    for (UINT64 i = 0; i + GAME_HEADER_BYTES + SCRIPT_MAX_SOURCE <= size; i++) {
+        bool hit = true;
+        for (UINT32 j = 0; j < GAME_MAGIC_LENGHT; j++) {
+            if (blob[i + j] != GAME_MAGIC[j]) {
+                hit = false;
+                break;
+            }
+        }
+        if (hit) return blob + i;
+    }
+    return 0;
+}
+
+static void CmdExport(const char *args) {
+    if (!EnFS::mounted) {
+        Console::Println("enfs not mounted");
+        return;
+    }
+
+    char scriptName[ENFS_NAME_LENGHT];
+    UINT32 n = 0;
+    while (*args && *args != ' ' && n < ENFS_NAME_LENGHT - 1) scriptName[n++] = *args++;
+    scriptName[n] = '\0';
+    while (*args == ' ') args++;
+
+    if (n == 0 || !*args) {
+        Console::Println("usage: export <script> <gamename>");
+        return;
+    }
+
+    if (!scriptBuffer) scriptBuffer = (UINT8*)Heap::Alloc(SCRIPT_MAX_SOURCE, 16);
+    if (!scriptBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    UINT64 lenght = 0;
+    EnFsResult r = EnFS::ReadFile(scriptName, scriptBuffer, SCRIPT_MAX_SOURCE, &lenght);
+    if (r != ENFS_OK) {
+        Console::Print("export: ");
+        Console::Println(EnFS::ResultName(r));
+        return;
+    }
+
+    INT32 badLine = Script::Load((const char*)scriptBuffer, lenght);
+    if (badLine >= 0) {
+        Console::Print("bad script line ");
+        Console::PrintUInt((UINT64)badLine);
+        Console::Print('\n');
+        return;
+    }
+
+    UINT64 blobSize = (UINT64)(_binary_RUNTIME_EFI_end - _binary_RUNTIME_EFI_start);
+
+    if (!exportBuffer) exportBuffer = (UINT8*)Heap::Alloc(blobSize, 16);
+    if (!exportBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    for (UINT64 i = 0; i < blobSize; i++) {
+        exportBuffer[i] = _binary_RUNTIME_EFI_start[i];
+    }
+
+    UINT8 *slot = FindGameMagic(exportBuffer, blobSize);
+    if (!slot) {
+        Console::Println("no asset slot in runtime blob");
+        return;
+    }
+
+    for (UINT32 i = 0; i < 8; i++) {
+        slot[GAME_MAGIC_LENGHT + i] = (UINT8)(lenght >> (i * 8));
+    }
+    for (UINT64 i = 0; i < SCRIPT_MAX_SOURCE; i++) {
+        slot[GAME_HEADER_BYTES + i] = i < lenght ? scriptBuffer[i] : 0;
+    }
+
+    r = EnFS::WriteFile(args, exportBuffer, blobSize);
+    if (r != ENFS_OK) {
+        Console::Print("export: ");
+        Console::Println(EnFS::ResultName(r));
+        return;
+    }
+
+    Console::Print("exported ");
+    Console::Print(args);
+    Console::Print(" ");
+    Console::PrintUInt(blobSize);
+    Console::Println(" bytes");
+}
+
 const Command Shell::commands[] = {
     {"help", "list commands", CmdHelp},
     {"clear", "clear the terminal", CmdClear},
@@ -441,6 +669,9 @@ const Command Shell::commands[] = {
     {"neenor", "neenor <name>", CmdEditor},
     {"format", "format [--yes] create an enfs volume", CmdFormat},
     {"ls", "list files", CmdLs},
+    {"rm", "rm <file> [<file> ...] --yes [--frfr], Delete files, frfr wipes data", CmdRm},
+    {"play", "play <script.es>, ", CmdPlay},
+    {"export", "export <script.es> <gamename>, Link to Runtime.EFI", CmdExport},
 
 };
 
