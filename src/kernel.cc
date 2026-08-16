@@ -3,6 +3,7 @@
 #include "Console/Console.hh"
 #include "Graphics/graphics.hh"
 #include "Memory/Heap.hh"
+#include "Memory/Framse.hh"
 #include "Memory/Paging.hh"
 #include "Text.hh"
 #include "input/keyboard.hh"
@@ -67,7 +68,7 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
     Graphics::back.clear(0x00000000);
 
 
-    // Memory  
+    // Memory
     UINTN mapSize = 0;
     EFI_MEMORY_DESCRIPTOR *memoryMap = 0;
     UINTN mapKey;
@@ -76,22 +77,36 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
 
-    mapSize += 2 * descriptorSize;
+    mapSize += 4 * descriptorSize;
+    UINTN mapCapacity = mapSize;
 
-    SystemTable->BootServices->AllocatePool(EfiLoaderData, mapSize, (void**)&memoryMap);
+    SystemTable->BootServices->AllocatePool(EfiLoaderData, mapCapacity, (void**)&memoryMap);
 
     EFI_STATUS MemoryStatus = SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
 
+    UINT64 bitmapBytes = Frames::BitmapBytesNeeded(memoryMap, mapSize, descriptorSize);
+    void *bitmapMemory = 0;
+    SystemTable->BootServices->AllocatePool(EfiLoaderData, bitmapBytes, &bitmapMemory);
 
-    
+    mapSize = mapCapacity;
+    MemoryStatus = SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
+
+
+
     // EXIT UEFI
-    
+
     EFI_STATUS BootStatus = SystemTable->BootServices->ExitBootServices(ImageHandle ,mapKey);
-    
+
+    Frames::Init(memoryMap, mapSize, descriptorSize, bitmapMemory, bitmapBytes);
+
     Paging::EnableWriteCombining();
+    if (Paging::BuildKernelTables(memoryMap, mapSize, descriptorSize)) {
+        Paging::Activate();
+    }
+    Paging::MapUc(fbBase, fbSize);
     Paging::MarkRangeWc(fbBase, fbSize);
 
-    Heap::Init(memoryMap, mapSize, descriptorSize);
+    Heap::Init();
     Clock::StartClock();
     Pci::Scan();
 

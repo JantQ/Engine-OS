@@ -11,6 +11,13 @@ class Paging {
         static UINT32 MarkRangeWc(UINT64 base, UINT64 size);
         static UINT64 EntryFor(UINT64 addr, UINT32 *level);
 
+        static bool BuildKernelTables(EFI_MEMORY_DESCRIPTOR *map, UINTN mapSize, UINTN descriptorSize);
+        static bool MapUc(UINT64 base, UINT64 size);
+        static void Activate();
+
+        static inline UINT64 kernelPm14 = 0;
+        static inline bool ownTables = false;
+
         static inline UINT64 ReadCr3() {
             UINT64 v;
             __asm__ __volatile__("mov %%cr3, %0" : "=r"(v));

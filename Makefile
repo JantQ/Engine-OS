@@ -60,6 +60,18 @@ run: BOOTX64.EFI
 		-drive file=disk.img,if=none,id=nvm,format=raw \
 		-device nvme,serial=deadbeed,drive=nvm \
 
+rungame:
+	./getgame.sh $(GAME)
+	cp esp/export/EFI/BOOT/$(GAME) esp/export/EFI/BOOT/BOOTX64.EFI
+	qemu-system-x86_64 \
+		-m 1G \
+		-cpu max \
+		-drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
+		-drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd \
+		-drive format=raw,file=fat:rw:esp/export \
+		-serial stdio
+
+
 disk:
 	rm -f disk.img
 	qemu-img create -f raw disk.img 1G

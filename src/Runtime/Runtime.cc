@@ -2,6 +2,7 @@
 #include "../Clock/Clock.hh"
 #include "../Graphics/graphics.hh"
 #include "../Memory/Heap.hh"
+#include "../Memory/Framse.hh"
 #include "../Memory/Paging.hh"
 #include "../Text.hh"
 #include "../input/keyboard.hh"
@@ -69,18 +70,32 @@ extern "C" UINT32 init_runtime(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemT
 
     SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
 
-    mapSize += 2 * descriptorSize;
+    mapSize += 4 * descriptorSize;
+    UINTN mapCapacity = mapSize;
 
-    SystemTable->BootServices->AllocatePool(EfiLoaderData, mapSize, (void**)&memoryMap);
+    SystemTable->BootServices->AllocatePool(EfiLoaderData, mapCapacity, (void**)&memoryMap);
 
+    SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
+
+    UINT64 bitmapBytes = Frames::BitmapBytesNeeded(memoryMap, mapSize, descriptorSize);
+    void *bitmapMemory = 0;
+    SystemTable->BootServices->AllocatePool(EfiLoaderData, bitmapBytes, &bitmapMemory);
+
+    mapSize = mapCapacity;
     SystemTable->BootServices->GetMemoryMap(&mapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
 
     SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
 
+    Frames::Init(memoryMap, mapSize, descriptorSize, bitmapMemory, bitmapBytes);
+
     Paging::EnableWriteCombining();
+    if (Paging::BuildKernelTables(memoryMap, mapSize, descriptorSize)) {
+        Paging::Activate();
+    }
+    Paging::MapUc(fbBase, fbSize);
     Paging::MarkRangeWc(fbBase, fbSize);
 
-    Heap::Init(memoryMap, mapSize, descriptorSize);
+    Heap::Init();
     Clock::StartClock();
 
     UINT64 gameLenght = 0;

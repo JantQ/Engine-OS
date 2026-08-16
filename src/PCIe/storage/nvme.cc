@@ -1,6 +1,7 @@
 #include "Nvme.hh"
 #include "../../Clock/Clock.hh"
 #include "../../Memory/Heap.hh"
+#include "../../Memory/Paging.hh"
 
 bool Nvme::Init(PciDevice *device) {
     if (!device) return false;
@@ -10,6 +11,7 @@ bool Nvme::Init(PciDevice *device) {
     bar0 = Pci::ReadBar(device->bus, device->device, device->func, 0);
     if (bar0 == 0) return false;
 
+    if (!Paging::MapUc(bar0, 2 * 1024 * 1024)) return false;
 
     UINT32 capLo = Read32(NVME_CAP);
     UINT32 capHi = Read32(NVME_CAP + 4);

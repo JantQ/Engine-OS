@@ -8,6 +8,8 @@
 #define SCRIPT_MAX_LABLES 64
 #define SCRIPT_STRING_POOL 2048
 #define SCRIPT_NAME_LENGHT 16
+#define SCRIPT_ARENA_BYTES (256 * 1024)
+#define SCRIPT_CALL_DEPTH 32
 
 #define GAME_MAGIC_LENGHT 16
 #define GAME_HEADER_BYTES (GAME_MAGIC_LENGHT + 8)
@@ -34,6 +36,11 @@ enum ScriptOp : UINT8 {
     OP_WAIT,
     OP_FLIP,
     OP_END,
+    OP_ALLOC,
+    OP_POKE,
+    OP_PEEK,
+    OP_GOSUB,
+    OP_RETURN,
 };
 
 struct ScriptArg {
@@ -57,6 +64,7 @@ class Script {
         static INT32 Load(const char *source, UINT64 lenght);
         static bool Step();
         static void RunLoop(bool allowEsc);
+        static void FreeArena();
 
         struct Lable {
             char name[SCRIPT_NAME_LENGHT];
@@ -75,6 +83,13 @@ class Script {
         static inline char stringPool[SCRIPT_STRING_POOL];
         static inline UINT32 stringUsed = 0;
         static inline UINT64 rngState = 1;
+
+        static inline INT64 *arena = 0;
+        static inline UINT64 arenaSlots = 0;
+        static inline UINT64 arenaUsed = 0;
+
+        static inline UINT32 callStack[SCRIPT_CALL_DEPTH];
+        static inline UINT32 callDepth = 0;
 
     private:
         static INT64 Val(ScriptArg &arg);

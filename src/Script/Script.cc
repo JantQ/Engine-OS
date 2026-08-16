@@ -3,6 +3,7 @@
 #include "../Text.hh"
 #include "../Clock/Clock.hh"
 #include "../input/keyboard.hh"
+#include "../Memory/Framse.hh"
 
 struct Token {
     const char *start;
@@ -146,16 +147,20 @@ UINT64 Script::Rand() {
 }
 
 INT32 Script::Load(const char *source, UINT64 lenght) {
+    FreeArena();
+
     lineCount = 0;
     pc = 0;
     Script::varCount = 0;
     Script::lableCount = 0;
     Script::stringUsed = 0;
+    Script::callDepth = 0;
     Script::rngState = Clock::rdtsc() | 1;
 
     const char *p = source;
     const char *end = source + lenght;
     INT32 srcLine = 0;
+    bool inComment = false;
 
     while (p < end) {
         srcLine++;
@@ -163,8 +168,42 @@ INT32 Script::Load(const char *source, UINT64 lenght) {
         const char *lineEnd = p;
         while (lineEnd < end && *lineEnd != '\n') lineEnd++;
 
+        if (inComment) {
+            for (const char *s = p; s + 1 < lineEnd; s++) {
+                if (s[0] == 'C' && s[1] == '#') {
+                    inComment = false;
+                    break;
+                }
+            }
+            p = lineEnd < end ? lineEnd + 1 : end;
+            continue;
+        }
+
+        const char *cut = lineEnd;
+        bool inQuote = false;
+        for (const char *s = p; s + 1 < lineEnd; s++) {
+            if (*s == '"') inQuote = !inQuote;
+            if (inQuote) continue;
+            if (s[0] == '#' && s[1] == 'C') {
+                cut = s;
+                break;
+            }
+            if (s[0] == 'C' && s[1] == '#') {
+                cut = s;
+                inComment = true;
+
+                for (const char *c = s + 2; c + 1 < lineEnd; c++) {
+                    if (c[0] == 'C' && c[1] == '#') {
+                        inComment = false;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
         Token toks[8];
-        UINT32 n = Tokenize(p, lineEnd, toks, 8);
+        UINT32 n = Tokenize(p, cut, toks, 8);
         p = lineEnd < end ? lineEnd + 1 : end;
 
         if (n == 0) continue;
@@ -206,6 +245,16 @@ INT32 Script::Load(const char *source, UINT64 lenght) {
             L.op = OP_GOTO;
             L.ref = toks[1].start;
             L.refLenght = toks[1].lenght;
+        }
+        else if (TokenIs(toks[0], "gosub")) {
+            if (n != 2) return srcLine;
+            L.op = OP_GOSUB;
+            L.ref = toks[1].start;
+            L.refLenght = toks[1].lenght;
+        }
+        else if (TokenIs(toks[0], "return")) {
+            if (n != 1) return srcLine;
+            L.op = OP_RETURN;
         }
         else if (TokenIs(toks[0], "if")) {
             if (n != 6 || toks[2].lenght != 1) return srcLine;
@@ -271,6 +320,26 @@ INT32 Script::Load(const char *source, UINT64 lenght) {
             L.op = OP_WAIT;
             if (!ParseArg(toks[1], &L.a)) return srcLine;
         }
+        else if (TokenIs(toks[0], "alloc")) {
+            if (n != 3) return srcLine;
+            L.op = OP_ALLOC;
+            if (!ParseVar(toks[1], &L.a)) return srcLine;
+            if (!ParseArg(toks[2], &L.b)) return srcLine;
+        }
+        else if (TokenIs(toks[0], "poke")) {
+            if (n != 4) return srcLine;
+            L.op = OP_POKE;
+            if (!ParseArg(toks[1], &L.a)) return srcLine;
+            if (!ParseArg(toks[2], &L.b)) return srcLine;
+            if (!ParseArg(toks[3], &L.c)) return srcLine;
+        }
+        else if (TokenIs(toks[0], "peek")) {
+            if (n != 4) return srcLine;
+            L.op = OP_PEEK;
+            if (!ParseArg(toks[1], &L.a)) return srcLine;
+            if (!ParseArg(toks[2], &L.b)) return srcLine;
+            if (!ParseVar(toks[3], &L.c)) return srcLine;
+        }
         else if (TokenIs(toks[0], "flip")) {
             L.op = OP_FLIP;
         }
@@ -329,6 +398,15 @@ bool Script::Step() {
                 break;
             }
             case OP_GOTO: pc = (UINT32)L.target; break;
+            case OP_GOSUB:
+                if (callDepth >= SCRIPT_CALL_DEPTH) return false;
+                callStack[callDepth++] = pc + 1;
+                pc = (UINT32)L.target;
+                break;
+            case OP_RETURN:
+                if (callDepth == 0) return false;
+                pc = callStack[--callDepth];
+                break;
             case OP_IF: {
                 INT64 x = Val(L.a);
                 INT64 y = Val(L.b);
@@ -373,12 +451,52 @@ bool Script::Step() {
                 pc++;
                 break;
             }
+            case OP_ALLOC: {
+                if (!arena) {
+                    arena = (INT64*)Frames::Alloc(SCRIPT_ARENA_BYTES / FRAME_SIZE);
+                    arenaSlots = arena ? SCRIPT_ARENA_BYTES / 8 : 0;
+                    arenaUsed = 1;
+                }
+
+                INT64 slotAmmount = Val(L.b);
+                if (slotAmmount < 1) slotAmmount = 1;
+
+                if (!arena || arenaUsed + (UINT64)slotAmmount > arenaSlots) {
+                    vars[L.a.value] = -1;
+                } else {
+                    vars[L.a.value] = (INT64)arenaUsed;
+                    arenaUsed += slotAmmount;
+                }
+                pc++;
+                break;
+            }
+            case OP_POKE: {
+                INT64 slot = Val(L.a) + Val(L.b);
+                if (arena && slot >= 1 && (UINT64)slot < arenaUsed) arena[slot] = Val(L.c);
+                pc++;
+                break;
+            }
+            case OP_PEEK: {
+                INT64 slot = Val(L.a) + Val(L.b);
+                vars[L.c.value] = (arena && slot >= 1 && (UINT64)slot < arenaUsed) ? arena[slot] : 0;
+                pc++;
+                break;
+            }
             case OP_FLIP: pc++; return true;
             case OP_END: return false;
             default: pc++; break;
         }
     }
     return false;
+}
+
+void Script::FreeArena() {
+    if (!arena) return;
+
+    Frames::Free(arena, SCRIPT_ARENA_BYTES / FRAME_SIZE);
+    arena = 0;
+    arenaSlots = 0;
+    arenaUsed = 0;
 }
 
 void Script::RunLoop(bool allowEsc) {
@@ -396,4 +514,6 @@ void Script::RunLoop(bool allowEsc) {
 
         if (!more) break;
     }
+
+    FreeArena();
 }

@@ -8,6 +8,8 @@
 #include "../Editor/Editor.hh"
 #include "../FileSystem/EnFS.hh"
 #include "../Script/Script.hh"
+#include "../Memory/Framse.hh"
+#include "../Memory/Paging.hh"
 
 extern "C" UINT8 _binary_RUNTIME_EFI_start[];
 extern "C" UINT8 _binary_RUNTIME_EFI_end[];
@@ -432,6 +434,29 @@ static void CmdLs(const char *) {
     Console::Println("M");
 }
 
+static void CmdMem(const char *) {
+    UINT64 usedFrames = Frames::totalFrames - Frames::freeFrames;
+
+    Console::Print("frames: ");
+    Console::PrintUInt(usedFrames);
+    Console::Print(" used of ");
+    Console::PrintUInt(Frames::totalFrames);
+    Console::Print(" (");
+    Console::PrintUInt(usedFrames * FRAME_SIZE / MiB);
+    Console::Print("M of ");
+    Console::PrintUInt(Frames::totalFrames * FRAME_SIZE / MiB);
+    Console::Println("M)");
+
+    Console::Print("heap: ");
+    Console::PrintUInt(Heap::Used() / 1024);
+    Console::Print("K used of ");
+    Console::PrintUInt(Heap::Total() / MiB);
+    Console::Println("M");
+
+    Console::Print("paging: ");
+    Console::Println(Paging::ownTables ? "own tables" : "uefi tables");
+}
+
 #define RM_MAX_NAMES 16
 
 static void CmdRm(const char *args) {
@@ -669,6 +694,7 @@ const Command Shell::commands[] = {
     {"neenor", "neenor <name>", CmdEditor},
     {"format", "format [--yes] create an enfs volume", CmdFormat},
     {"ls", "list files", CmdLs},
+    {"mem", "show memory stats", CmdMem},
     {"rm", "rm <file> [<file> ...] --yes [--frfr], Delete files, frfr wipes data", CmdRm},
     {"play", "play <script.es>, ", CmdPlay},
     {"export", "export <script.es> <gamename>, Link to Runtime.EFI", CmdExport},

@@ -1,5 +1,15 @@
 # EnScript
 
+## Comments
+
+```
+#C single line comment
+
+C# multiline
+comment
+block C#
+```
+
 ## Statements
 
 ```
@@ -13,6 +23,8 @@ rnd x 10
 label loop
 goto loop
 if x < 20 goto loop
+gosub myroutine
+return
 end
 
 rect x y w h color
@@ -20,6 +32,10 @@ text 10 10 "HELLO"
 num 10 30 score
 
 key right d
+
+alloc buf 100
+poke buf 5 x
+peek buf 5 y
 
 flip
 wait 16
