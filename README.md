@@ -1,33 +1,79 @@
-# Engine OS
+# Engine-OS
 
-This is supposed to be an Operating System that can create games that run as bare 
-EFI files on the PC.
+Engine-OS is supposed to be an operating system that allows you to create games *inside* the operating system and distribute them as standalone bootable `.EFI` files. 
 
-The idea is that it is a Game Engine and a Operating System combined. This 
-wouldnt really have any real life use. This is technically how one could create 
-Physical Games on USB sticks and just run them from there.
+You write a game in the built in editor and compile it against the runtime kernel that does all the heavy lifting for you
 
-One of the main things this is also allows is ABSOLUTE PERFORMANCE of the games.
-The CPU times of the game should basically be the BEST possible. But of course
-there is also a massive minus. The fact that you would basically need to write
-a GPU driver for this to actually like properly work and be usable.
+## Working things
 
-Technically if one made a GPU driver for something like this then it would be
-possible to create games that run way better than games made with Unreal Engine
-or big games of big AAA studios. But realistically that propably isnt possible.
+- Boots on UEFI
+- Own memory management
+- NVMe driver
+- Some type of small shell with commands, Type `help` for the available command list
+- "neenor" is the built in text editor that lets you create files into the EnFS filesystem
 
-Mostly why i want to build this is because i love creating games and ive also fell
-in love with OS development. So i decided why not make something like this. It 
-doesnt really have any real life usecases but you know... Its always something for
-the coveted Portfolio.
+- **EnScript** is our own scripting language, Reference to this can be found in [ENSCRIPT.md](ENSCRIPT.md). This language is a bit Assembly flavoured but meant to change to more C like language later. For reference code you can see [pong](Games/pong.es) or [snake](Games/snake.es).
 
-I think ill leave this as Open-Source... possibly and maybe. 
+- **AOT compiler** works halfly
 
-Yes i'll leave it as Open-Sauzee. I don't reall know why am i always yapping in these 
-comments and this readme since i know noone is going to read this version cause you know. 
-Since it is completely unusable as an OS. I mean one could technically use it to write 
-something since we have editor "window" that we can use to write shit into files properly 
-and save it. But i mean i've come to the conclusion that i will make the games have a other
-kernel blob that i will link them into. so basically its same as the engine but just 
-without the main engine things like code editors and shi like that. maybe some of the 
-methods and shi!
+## Making a game
+
+`neenor snake.es` write it in the editor
+
+`play snake.es` to test it
+
+`export snake.es snake.efi` export and link it to the runtime kernel
+
+Then on the linux side you can pull it out of the disk.img with `./getgame.sh snake.efi`
+
+or run it straight with `make rungame GAME=snake.efi`
+
+These both place the bootable `.EFI` into
+esp/export/EFI/BOOT/BOOTX64.EFI
+
+
+you can also build the game into opcode inside the kernel
+
+`neenor test.es` write something
+
+`make test.es test` compile it into opcode
+
+`test` to run the code
+
+Right now exporting still works through the interpreter instead of the opcode
+
+## Building
+
+You need `x86_64-w64-mingw32-gcc`, `qemu-system-x86_64` and OVMF firmware (edk2).
+
+The Makefile excpects OVMF at `/usr/share/edk2/x64/`
+
+`make` build the OS (BOOTX64.EFI)
+
+`make runtime` build the game runtime kernel (RUNTIME.EFI)
+
+`make run` boot the OS in QEMU with an NVMe disk attached
+
+`make disk` create a fresh empty 1G disk image
+
+First boot on a fresh disk, run these in the shell
+
+`mkpart 64 engine --yes`
+
+`mount`
+
+`format --yes`
+
+## Roadmap
+
+- **AOT compiler** 
+- **C-Like Sytnax**
+- **FAT32 support**
+
+
+## -The general who builds his own roads is never lost on them. -Sun Tzu, The Art of Engine OS
+
+
+## My yappings (Not anything important under this)
+
+This project is meant to be left as open source. You can take this project and see the source code for yourself if you want to (The code might not be the best you have ever seen). Also the main reason im making this is because i have loved game development since the day i started coding and i though why not create a game engine. Then i started to create a game engine in Vulkan. After a year or so messing around with Vulkan i started to get bored in the vulkan language and how i didnt have control over some things. Then i started thinking about dabbling into OS dev and got this goddamn bright idea of "What if i made an Operating System that is Game Engine". This way i would have the most control over everything. The Drivers and shi. But being me i don't know why i always try to make my life so much harder and use basically no external dependencies and libraries. Also if someone read all of this yapping `Fuck you`. Im just kidding i hope you find happiness in your life and understand the meaning of life.

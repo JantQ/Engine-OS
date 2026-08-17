@@ -5,3 +5,4 @@ OVMF_VARS.fd
 BOOTX64.EFI
 esp/
 RUNTIME.EFI
+disk.img

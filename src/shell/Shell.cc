@@ -10,6 +10,10 @@
 #include "../Script/Script.hh"
 #include "../Memory/Framse.hh"
 #include "../Memory/Paging.hh"
+#include "../Compiler/Compiler.hh"
+#include "../Compiler/Loader.hh"
+#include "../Libs/Crc.hh"
+
 
 extern "C" UINT8 _binary_RUNTIME_EFI_start[];
 extern "C" UINT8 _binary_RUNTIME_EFI_end[];
@@ -18,7 +22,7 @@ static UINT8 *sectorBuffer = 0;
 static UINT8 *partBuffer = 0;
 static UINT8 *scriptBuffer = 0;
 static UINT8 *exportBuffer = 0;
-
+static UINT8 *buildBuffer = 0;
 
 void Shell::Execute(const char *line) {
     while (*line == ' ') line++;
@@ -44,6 +48,9 @@ void Shell::Execute(const char *line) {
         }
     }
     Console::Print('\n');
+
+    if (Loader::Run(name)) return;
+
     Console::Print("Unknown command: ");
     Console::Println(name);
 }
@@ -679,6 +686,97 @@ static void CmdExport(const char *args) {
     Console::Println(" bytes");
 }
 
+static void CmdMake(const char *args) {
+    if (!EnFS::mounted) {
+        Console::Println("EnFS not mounted");
+        return;
+    }
+
+    char scriptName[ENFS_NAME_LENGHT];
+    UINT32 n = 0;
+    while (*args && *args != ' ' && n < ENFS_NAME_LENGHT - 1) scriptName[n++] = *args++;
+    scriptName[n] = '\0';
+    while (*args == ' ') args++;
+
+    if (n == 0 || !*args) {
+        Console::Println("usage: make <script.es> <gamename>");
+        return;
+    }
+
+    if (!scriptBuffer) scriptBuffer = (UINT8*)Heap::Alloc(SCRIPT_MAX_SOURCE);
+    if (!buildBuffer) buildBuffer = (UINT8*)Heap::Alloc(ENEXE_MAX_BYTES);
+    if (!scriptBuffer || !buildBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    UINT64 size = 0;
+    EnFsResult res = EnFS::ReadFile(scriptName, scriptBuffer, SCRIPT_MAX_SOURCE, &size);
+    if (res != ENFS_OK) {
+        Console::Print("make: ");
+        Console::Println(EnFS::ResultName(res));
+        return;
+    }
+
+    INT32 bad = Script::Load((const char*)scriptBuffer, size);
+    if (bad >= 0) {
+        Console::Print("bad script line ");
+        Console::PrintUInt((UINT64)bad);
+        Console::Print('\n');
+        return;
+    }
+
+    UINT64 codeCap = ENEXE_MAX_BYTES - sizeof(EnExeHeader) - Script::stringUsed;
+    UINT32 badLine = 0;
+    UINT64 codeBytes = Compiler::Compile(buildBuffer + sizeof(EnExeHeader), codeCap, &badLine);
+
+    if (!codeBytes) {
+        Console::Print("cannot compile line ");
+        Console::PrintUInt((UINT64)badLine);
+        Console::Print('\n');
+        return;
+    }
+
+    UINT64 stringOffset = sizeof(EnExeHeader) + codeBytes;
+    for (UINT32 i = 0; i < Script::stringUsed; i++) {
+        buildBuffer[stringOffset + i] = (UINT8)Script::stringPool[i];
+    }
+    UINT64 total = stringOffset + Script::stringUsed;
+
+    EnExeHeader *header = (EnExeHeader*)buildBuffer;
+    for (UINT32 i = 0; i < ENEXE_MAGIC_BYTES; i++) {
+        header->magic[i] = ENEXE_MAGIC[i];
+    }
+    header->formatVersion = ENEXE_FORMAT;
+    header->ctxVersion = ENEXE_CTX_VERSION;
+    header->codeOffset = sizeof(EnExeHeader);
+    header->codeBytes = codeBytes;
+    header->entryOffset = 0;
+    header->stringOffset = stringOffset;
+    header->stringBytes = Script::stringUsed;
+    header->varCount = Script::varCount;
+    header->crc32 = EnExeCrc(buildBuffer, total);
+
+    res = EnFS::WriteFile(args, buildBuffer, total);
+    if (res != ENFS_OK) {
+        Console::Print("make: ");
+        Console::Println(EnFS::ResultName(res));
+        return;
+    }
+
+    Console::Print("made ");
+    Console::Print(args);
+    Console::Print(" code ");
+    Console::PrintUInt(codeBytes);
+    Console::Print(" strings ");
+    Console::PrintUInt(Script::stringUsed);
+    Console::Print(" total ");
+    Console::PrintUInt(total);
+    Console::Println(" bytes");
+}
+
+
+
 const Command Shell::commands[] = {
     {"help", "list commands", CmdHelp},
     {"clear", "clear the terminal", CmdClear},
@@ -698,6 +796,7 @@ const Command Shell::commands[] = {
     {"rm", "rm <file> [<file> ...] --yes [--frfr], Delete files, frfr wipes data", CmdRm},
     {"play", "play <script.es>, ", CmdPlay},
     {"export", "export <script.es> <gamename>, Link to Runtime.EFI", CmdExport},
+    {"make", "make <script.es> <gamename>, compile to machine code", CmdMake},
 
 };
 
