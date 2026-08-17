@@ -4,8 +4,10 @@
 #include "../Memory/Heap.hh"
 #include "../Memory/Framse.hh"
 #include "../Clock/Clock.hh"
-#include "../Libs/Crc.hh"
 #include "Compiler.hh"
+#include "../Engine/Engine.hh"
+#include "../input/keyboard.hh"
+#include "../Graphics/graphics.hh"
 
 static UINT8 *loadBuffer = 0;
 static EnCtx runCtx;
@@ -69,11 +71,34 @@ bool Loader::Run(const char *name) {
     runCtx.arenaUsed = 0;
     runCtx.arenaSlots = 0;
     runCtx.rngState = Clock::rdtsc() | 1;
-    runCtx.fuel = 0;
+    runCtx.fuel = 200000;
     runCtx.strings = (const char*)(loadBuffer + header->stringOffset);
+    runCtx.fn[FN_KEYDOWN] = (void*)&EnKeyDown;
+    runCtx.fn[FN_SCREENW] = (void*)&EnScreenW;
+    runCtx.fn[FN_SCREENH] = (void*)&EnScreenH;
+    runCtx.fn[FN_MILLIS] = (void*)&EnMillis;
+    runCtx.fn[FN_WAIT] = (void*)&EnWait;
+    runCtx.fn[FN_RECT] = (void*)&EnRect;
+    runCtx.fn[FN_TEXT] = (void*)&EnText;
+    runCtx.fn[FN_NUM] = (void*)&EnNum;
+    runCtx.fn[FN_FLIP] = (void*)&EnFlip;
+    runCtx.fn[FN_ALLOC] = (void*)&EnAlloc;
+    runCtx.fn[FN_POKE] = (void*)&EnPoke;
+    runCtx.fn[FN_PEEK] = (void*)&EnPeek;
+    
+
+    Keyboard::ClearStates();
+    Graphics::back.clear(0x00000000);
 
     EnCode entry = (EnCode)(void*)(code + header->entryOffset);
     entry(&runCtx);
+
+    if (runCtx.arena) {
+        Frames::Free(runCtx.arena, SCRIPT_ARENA_BYTES / FRAME_SIZE);
+        runCtx.arena = 0;
+        runCtx.arenaUsed = 0;
+        runCtx.arenaSlots = 0;
+    }
 
     for (UINT32 i = 0; i < header->varCount && i < SCRIPT_MAX_VARS; i++) {
         Console::PrintUInt(i);

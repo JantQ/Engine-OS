@@ -21,15 +21,45 @@ static void LoadReg(ScriptArg &args, UINT8 reg = REG_RAX ) {
     }
 }
 
+static void AddFixup(UINT64 site, INT32 target) {
+    if (fixupCount >= SCRIPT_MAX_LINES) {
+        e.overflow = true;
+        return;
+    }
+    fixups[fixupCount].site = site;
+    fixups[fixupCount].target = target;
+    fixupCount++;
+}
+
+static void StoreArg(UINT32 index, ScriptArg &a) {
+    if (!a.isVar && FitsImm32(a.value)) {
+        e.MemRbx(0xC7, 0, CTX_ARGS + index * 8);
+        e.U32((UINT32)(INT32)a.value);
+    } else {
+        LoadReg(a, REG_RAX);
+        e.MemRbx(0x89, REG_RAX, CTX_ARGS + index * 8);
+    }
+}
+
+static void CallFn(UINT32 index) {
+    e.RegReg(0x89, REG_RBX, REG_RCX);
+    e.MemRbx(0x8B, REG_RAX, CTX_FN + index * 8);
+    e.CallReg(REG_RAX);
+} 
+
 UINT64 Compiler::Compile(UINT8 *out, UINT64 cap, UINT32 *badLine) {
     e.Init(out, cap);
+    fixupCount = 0;
     *badLine = 0;
 
     e.U8(0x53); // push rbx
-    e.RegImm8(0x83, 5, REG_RSP, 32); // sub rsp, 32 
+    e.U8(0x55);
+    e.RegReg(0x89, REG_RSP, REG_RBP);
+    e.RegImm8(0x83, 5, REG_RSP, 40); // sub rsp, 40 
     e.RegReg(0x89, REG_RCX, REG_RBX); // mov rbx, rcx
 
     for (UINT32 i = 0; i < Script::lineCount; i++) {
+        lineOffset[i] = (UINT32)e.used;
         ScriptLine &Line = Script::lines[i];
 
         switch (Line.op) {
@@ -122,20 +152,145 @@ UINT64 Compiler::Compile(UINT8 *out, UINT64 cap, UINT32 *badLine) {
                 e.U32(0);
                 e.Patch8(done);
                 break;
-                }               
+            }               
 
+            case OP_GOTO:
+                AddFixup(e.Rel32(0xE9), Line.target); // jmp rel32
+                break;
             
-            case OP_END:
+            case OP_IF: {
+                LoadReg(Line.a, REG_RAX);
+
+                if (Line.b.isVar) {
+                    e.MemRbx(0x3B, REG_RAX, VarDisp(Line.b.value)); // cmp rax, [rbx+y]
+                } else if (FitsImm32(Line.b.value)) {
+                    e.RegReg(0x81, 7, REG_RAX); // cmp rax, imm32
+                    e.U32((UINT32)(INT32)Line.b.value);
+                } else {
+                    LoadReg(Line.b, REG_RCX);
+                    e.RegReg(0x39, REG_RCX, REG_RAX); // cmp rax, rcx
+                }
+
+                UINT8 cc;
+                if (Line.cmp == '=') cc = 0x84; // je
+                else if (Line.cmp == '!') cc = 0x85; // jne
+                else if (Line.cmp == '<') cc = 0x8C; // jl
+                else cc= 0x8F; // jg
+
+                AddFixup(e.Rel32_0F(cc), Line.target);
+                break;
+            }
+
+            case OP_KEY:
+                LoadReg(Line.b, REG_RCX);
+                e.MemRbx(0x8B, REG_RAX, CTX_FN + FN_KEYDOWN * 8);
+                e.CallReg(REG_RAX);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value));
+                break;
+            
+            case OP_SCREEN: 
+                e.MemRbx(0x8B, REG_RAX, CTX_FN + FN_SCREENW * 8);
+                e.CallReg(REG_RAX);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value));
+
+                e.MemRbx(0x8B, REG_RAX, CTX_FN + FN_SCREENH * 8);
+                e.CallReg(REG_RAX);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.b.value));
                 break;
 
+            case OP_MILLIS: 
+                e.MemRbx(0x8B, REG_RAX, CTX_FN + FN_MILLIS * 8);
+                e.CallReg(REG_RAX);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value));
+                break;
+
+            case OP_WAIT:
+                LoadReg(Line.a, REG_RCX);
+                e.MemRbx(0x8B, REG_RAX, CTX_FN + FN_WAIT * 8);
+                e.CallReg(REG_RAX);
+                break;
+            
+            case OP_END:
+                AddFixup(e.Rel32(0xE9), (INT32)Script::lineCount); // jmp epilogue
+                break;
+
+            case OP_RECT:
+                StoreArg(0, Line.a);
+                StoreArg(1, Line.b);
+                StoreArg(2, Line.c);
+                StoreArg(3, Line.d);
+                StoreArg(4, Line.e);
+                CallFn(FN_RECT);
+                break;
+
+            case OP_TEXT:
+                StoreArg(0, Line.a);
+                StoreArg(1, Line.b);
+                e.MemRbx(0xC7, 0, CTX_ARGS + 2 * 8);
+                e.U32(Line.strOffset);
+                CallFn(FN_TEXT);
+                break;
+
+            case OP_NUM:
+                StoreArg(0, Line.a);
+                StoreArg(1, Line.b);
+                StoreArg(2, Line.c);
+                CallFn(FN_NUM);
+                break;
+            
+            case OP_FLIP:
+                CallFn(FN_FLIP);
+                e.RegReg(0x85, REG_RAX, REG_RAX);
+                AddFixup(e.Rel32_0F(0x84), (INT32)Script::lineCount);
+                break;
+
+            case OP_ALLOC:
+                StoreArg(0, Line.b);
+                CallFn(FN_ALLOC);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value));
+                break;  
+
+            case OP_POKE:
+                StoreArg(0, Line.a);
+                StoreArg(1, Line.b);
+                StoreArg(2, Line.c);
+                CallFn(FN_POKE);
+                break;
+
+            case OP_PEEK:
+                StoreArg(0, Line.a);
+                StoreArg(1, Line.b);
+                CallFn(FN_PEEK);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.c.value));
+                break;
+
+            case OP_GOSUB:
+                e.RegImm8(0x83, 5, REG_RSP, 8);
+                AddFixup(e.Rel32(0xE8), Line.target);
+                e.RegImm8(0x83, 0, REG_RSP, 8);
+                break;
+
+            case OP_RETURN:
+                e.U8(0xC3);
+                break;
+            
             default:
                 *badLine = Line.srcLine;
                 return 0;
         }
     }
-    e.RegImm8(0x83, 0, REG_RSP, 32); // add rsp, 32
-    e.U8(0x5B); // pop rbx
-    e.U8(0xC3); // ret
+    lineOffset[Script::lineCount] = (UINT32)e.used;
+
+    e.RegReg(0x89, REG_RBP, REG_RSP);
+    e.U8(0x5D);
+    e.U8(0x5B);
+    e.U8(0xC3);
+
+    if (e.overflow) return 0;
+    
+    for (UINT32 f = 0; f < fixupCount; f++) {
+        e.Patch32(fixups[f].site, lineOffset[fixups[f].target]);
+    }
 
     if (e.overflow) return 0;
     return e.used;

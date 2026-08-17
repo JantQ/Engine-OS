@@ -71,10 +71,30 @@ class Emit {
             U8(imm);
         }
 
+        void CallReg(UINT8 reg) {
+            U8(0xFF);
+            U8((UINT8)(0xD0 | reg));
+        }
+
         UINT64 Rel8(UINT8 op) {
             U8(op);
             U8(0x00);
             return used - 1;
+        }
+
+        UINT64 Rel32(UINT8 op) {
+            U8(op);
+            UINT64 site = used;
+            U32(0);
+            return site;
+        }
+
+        UINT64 Rel32_0F(UINT8 op) {
+            U8(0x0F);
+            U8(op);
+            UINT64 site = used;
+            U32(0);
+            return site;
         }
 
         void Patch8(UINT64 site) {
@@ -84,5 +104,17 @@ class Emit {
                 return;
             }
             buffer[site] = (UINT8)(INT8)delta;
+        }
+
+        void Patch32(UINT64 site, UINT64 target) {
+            INT64 delta = (INT64)target - (INT64)(site + 4);
+            if (delta < -2147483648LL || delta > 2147483647LL) {
+                overflow = true;
+                return;
+            }
+            buffer[site] = (UINT8)delta;
+            buffer[site + 1] = (UINT8)(delta >> 8);
+            buffer[site + 2] = (UINT8)(delta >> 16);
+            buffer[site + 3] = (UINT8)(delta >> 24);
         }
 };
