@@ -175,7 +175,11 @@ UINT64 Compiler::Compile(UINT8 *out, UINT64 cap, UINT32 *badLine) {
                 if (Line.cmp == '=') cc = 0x84; // je
                 else if (Line.cmp == '!') cc = 0x85; // jne
                 else if (Line.cmp == '<') cc = 0x8C; // jl
-                else cc= 0x8F; // jg
+                else if (Line.cmp == 'l') cc = 0x8E; // jle
+                else if (Line.cmp == 'g') cc = 0x8D; // jge
+                else cc = 0x8F; // jg
+
+                if (Line.neg) cc ^= 1;
 
                 AddFixup(e.Rel32_0F(cc), Line.target);
                 break;

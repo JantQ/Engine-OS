@@ -24,6 +24,7 @@ static UINT32 lookCount;
 static UINT32 badLine;
 static UINT32 tempNext;
 static bool Expr(ScriptArg *out);
+static bool Statement();
 
 static bool IsSpace(char c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
@@ -301,52 +302,134 @@ static bool IsType(const LexTok &t) {
     return IsWord(t, "byte") || IsWord(t, "short") || IsWord(t, "int") || IsWord(t, "long");
 }
 
-static bool IfStatement() {
-    LexTok kw = Next();
+static INT32 EmitIf(const ScriptArg &a, const ScriptArg &b, char cmp, UINT8 neg, UINT32 line) {
+    if (Script::lineCount >= SCRIPT_MAX_LINES) return -1;
 
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '(') return Fail(kw.line);
-    Next();
-
-    ScriptArg a;
-    if (!Expr(&a)) return false;
-
-    LexTok op = Peek(0);
-    char cmp = 0;
-    if (op.kind == TK_PUNCT) {
-        if (op.punct == '=' && op.punct2 == '=') cmp = '=';
-        else if (op.punct == '!' && op.punct2 == '=') cmp = '!';
-        else if (op.punct == '<' && op.punct2 == 0) cmp = '<';
-        else if (op.punct == '>' && op.punct2 == 0) cmp = '>';
-    }
-    if (!cmp) return Fail(op.line);
-    Next();
-
-    ScriptArg b;
-    if (!Expr(&b)) return false;
-
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ')') return Fail(kw.line);
-    Next();
-
-    if (!IsWord(Peek(0), "goto")) return Fail(kw.line);
-    Next();
-
-    LexTok target = Next();
-    if (target.kind != TK_WORD) return Fail(kw.line);
-
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(kw.line);
-    Next();
-
-    if (Script::lineCount >= SCRIPT_MAX_LINES) return Fail(kw.line);
-
+    INT32 at = (INT32)Script::lineCount;
     ScriptLine &L = Script::lines[Script::lineCount++];
     L.op = OP_IF;
     L.cmp = cmp;
+    L.neg = neg;
     L.a = a;
     L.b = b;
     L.target = -1;
-    L.srcLine = kw.line;
-    L.ref = target.word.start;
-    L.refLenght = target.word.lenght;
+    L.srcLine = line;
+    L.ref = 0;
+    L.refLenght = 0;
+    return at;
+}
+
+static bool Condition(ScriptArg *a, ScriptArg *b, char *cmp, UINT32 line) {
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '(') return Fail(line);
+    Next();
+
+    if (!Expr(a)) return false;
+
+    LexTok op = Peek(0);
+    char c = 0;
+    if (op.kind == TK_PUNCT) {
+        if (op.punct == '=' && op.punct2 == '=') c = '=';
+        else if (op.punct == '!' && op.punct2 == '=') c = '!';
+        else if (op.punct == '<' && op.punct2 == '=') c = 'l';
+        else if (op.punct == '>' && op.punct2 == '=') c = 'g';
+        else if (op.punct == '<' && op.punct2 == 0) c = '<';
+        else if (op.punct == '>' && op.punct2 == 0) c = '>';
+    }
+    if (!c) return Fail(op.line);
+    Next();
+
+    if (!Expr(b)) return false;
+
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ')') return Fail(line);
+    Next();
+
+    *cmp = c;
+    return true;
+}
+
+static bool Block(UINT32 line) {
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '{') return Fail(line);
+    Next();
+
+    while (!(Peek(0).kind == TK_PUNCT && Peek(0).punct == '}')) {
+        if (Peek(0).kind == TK_END) return Fail(line);
+        if (!Statement()) return false;
+    }
+    Next();
+    return true;
+}
+
+static bool IfStatement() {
+    LexTok kw = Next();
+
+
+    ScriptArg a, b;
+    char cmp;
+
+    if (!Condition(&a, &b, &cmp, kw.line)) return false;
+    if (IsWord(Peek(0), "goto")) {
+        Next();
+
+        LexTok target = Next();
+        if (target.kind != TK_WORD) return Fail(kw.line);
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(kw.line);
+        Next();
+
+        INT32 at = EmitIf(a, b, cmp, 0, kw.line);
+        if (at < 0) return Fail(kw.line);
+
+        Script::lines[at].ref = target.word.start;
+        Script::lines[at].refLenght = target.word.lenght;
+        return true;
+    }
+
+    INT32 skip = EmitIf(a, b, cmp, 1, kw.line);
+    if (skip < 0) return Fail(kw.line);
+
+    if (!Block(kw.line)) return false;
+
+    if (IsWord(Peek(0), "else")) {
+        Next();
+
+        UINT32 jmp = Script::lineCount;
+        if (!EmitBare(OP_GOTO, kw.line)) return Fail(kw.line);
+
+        Script::lines[skip].target = (INT32)Script::lineCount;
+
+        tempNext = 0;
+        if (IsWord(Peek(0), "if")) {
+            if (!IfStatement()) return false;
+        } else {
+            if (!Block(kw.line)) return false;
+        }
+
+        Script::lines[jmp].target = (INT32)Script::lineCount;
+        return true;
+    }
+
+    Script::lines[skip].target = (INT32)Script::lineCount;
+    return true;
+}
+
+static bool WhileStatement() {
+    LexTok kw = Next();
+
+    UINT32 top = Script::lineCount;
+
+    ScriptArg a, b;
+    char cmp;
+    if (!Condition(&a, &b, &cmp, kw.line)) return false;
+
+    INT32 exit = EmitIf(a, b, cmp, 1, kw.line);
+    if (exit < 0) return Fail(kw.line);
+
+    if (!Block(kw.line)) return false;
+
+    UINT32 back = Script::lineCount;
+    if (!EmitBare(OP_GOTO, kw.line)) return Fail(kw.line);
+    Script::lines[back].target = (INT32)top;
+
+    Script::lines[exit].target = (INT32)Script::lineCount;
     return true;
 }
 
@@ -357,6 +440,7 @@ static bool Statement() {
     tempNext = 0;
 
     if (IsWord(first, "if")) return IfStatement();
+    if (IsWord(first, "while")) return WhileStatement();
 
     UINT32 at = IsType(first) ? 1 : 0;
 
@@ -416,19 +500,13 @@ static bool Sub() {
     Next();
     if (Peek(0).punct != ')') return Fail(name.line);
     Next();
-    if (Peek(0).punct != '{') return Fail(name.line);
-    Next();
 
     UINT32 skip = Script::lineCount;
     if (!EmitBare(OP_GOTO, name.line)) return Fail(name.line);
 
     if (!EmitLabel(name.word)) return Fail(name.line);
 
-    while (!(Peek(0).kind == TK_PUNCT && Peek(0).punct == '}')) {
-        if (Peek(0).kind == TK_END) return Fail(name.line);
-        if (!Statement()) return false;
-    }
-    Next();
+    if (!Block(name.line)) return false;
 
     if (!EmitBare(OP_RETURN, name.line)) return Fail(name.line);
 

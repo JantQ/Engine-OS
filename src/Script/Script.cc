@@ -160,6 +160,8 @@ bool Script::ParseStatement(Token *toks, UINT32 n, UINT32 srcLine) {
 
     ScriptLine &L = lines[lineCount];
     L.op = OP_NONE;
+    L.cmp = 0;
+    L.neg = 0;
     L.target = -1;
     L.srcLine = srcLine;
     L.ref = 0;
@@ -424,7 +426,9 @@ bool Script::Step() {
                 if (L.cmp == '!') hit = x != y;
                 if (L.cmp == '<') hit = x < y;
                 if (L.cmp == '>') hit = x > y;
-                pc = hit ? (UINT32)L.target : pc + 1;
+                if (L.cmp == 'l') hit = x <= y;
+                if (L.cmp == 'g') hit = x >= y;
+                pc = (hit != (bool)L.neg)? (UINT32)L.target : pc + 1;
                 break;
             }
             case OP_RECT:

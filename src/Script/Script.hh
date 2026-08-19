@@ -51,6 +51,7 @@ struct ScriptArg {
 struct ScriptLine {
     UINT8 op;
     char cmp;
+    UINT8 neg;
     ScriptArg a, b, c, d, e;
     INT32 target;
     UINT32 strOffset;
