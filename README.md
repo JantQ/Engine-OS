@@ -1,4 +1,4 @@
-ava# Engine-OS
+# Engine-OS
 
 Engine-OS is supposed to be an operating system that allows you to create games *inside* the operating system and distribute them as standalone bootable `.EFI` files. 
 
