@@ -12,17 +12,17 @@ You write a game in the built in editor and compile it against the runtime kerne
 - Some type of small shell with commands, Type `help` for the available command list
 - "neenor" is the built in text editor that lets you create files into the EnFS filesystem
 
-- **EnScript** is our own scripting language, Reference to this can be found in [ENSCRIPT.md](ENSCRIPT.md). This language is a bit Assembly flavoured but meant to change to more C like language later. For reference code you can see [pong](Games/pong.es) or [snake](Games/snake.es).
+- **EnScript** is our own scripting language, Reference to this can be found in [ENSCRIPT.md](ENSCRIPT.md). This language is a bit Assembly flavoured but meant to change to more C like language later. For reference code you can see [pong](Games/pong.en) or [snake](Games/snake.en). (Realized that .es files show as typescript so changed to .en)
 
 - **AOT compiler** works halfly
 
 ## Making a game
 
-`neenor snake.es` write it in the editor
+`neenor snake.en` write it in the editor
 
-`play snake.es` to test it
+`play snake.en` to test it
 
-`export snake.es snake.efi` export and link it to the runtime kernel
+`export snake.en snake.efi` export and link it to the runtime kernel
 
 Then on the linux side you can pull it out of the disk.img with `./getgame.sh snake.efi`
 
@@ -34,9 +34,9 @@ esp/export/EFI/BOOT/BOOTX64.EFI
 
 you can also build the game into opcode inside the kernel
 
-`neenor test.es` write something
+`neenor test.en` write something
 
-`make test.es test` compile it into opcode
+`make test.en test` compile it into opcode
 
 `test` to run the code
 

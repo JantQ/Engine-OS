@@ -1,0 +1,125 @@
+screen w h;
+
+// speed
+int pspeed = 6;
+int bspeed = 5;
+
+int p1y = 200;
+int p2y = 200;
+
+int pad2x = w - 40;
+int p2hit = pad2x - 15;
+
+int maxy = h - 90;
+int bmax = h - 15;
+int s2x = w - 140;
+
+int s1 = 0;
+int s2 = 0;
+
+int bx = 0;
+int by = 0;
+int dx = 0;
+int dy = 0;
+serve();
+
+label loop;
+input();
+clamp();
+move();
+draw();
+wait 16;
+flip;
+goto loop;
+
+sub input() {
+   key w k;
+   if (k == 0) goto i1;
+   p1y = p1y - pspeed;
+   label i1;
+
+   key s k;
+   if (k == 0) goto i2;
+   p1y = p1y + pspeed;
+   label i2;
+
+   key up k;
+   if (k == 0) goto i3;
+   p2y = p2y - pspeed;
+   label i3;
+
+   key down k;
+   if (k == 0) goto i4;
+   p2y = p2y + pspeed;
+   label i4;
+}
+
+sub clamp() {
+   if (p1y > 0) goto c1;
+   p1y = 0;
+   label c1;
+   if (p1y < maxy) goto c2;
+   p1y = maxy;
+   label c2;
+
+   if (p2y > 0) goto c3;
+   p2y = 0;
+   label c3;
+   if (p2y < maxy) goto c4;
+   p2y = maxy;
+   label c4;
+}
+
+sub move() {
+   bx = bx + dx;
+   by = by + dy;
+
+   if (by > 0) goto m1;
+   dy = -dy;
+   by = by + dy;
+   label m1;
+   if (by < bmax) goto m2;
+   dy = -dy;
+   by = by + dy;
+   label m2;
+
+   // left paddle
+   if (bx > 40) goto m3;
+   if (by < p1y) goto m3;
+   if (by > p1y + 90) goto m3;
+   dx = -dx;
+   bx = 41;
+   label m3;
+
+   // right paddle
+   if (bx < p2hit) goto m4;
+   if (by < p2y) goto m4;
+   if (by > p2y + 90) goto m4;
+   dx = -dx;
+   bx = p2hit - 1;
+   label m4;
+
+   if (bx > 0) goto m5;
+   s2 = s2 + 1;
+   serve();
+   label m5;
+   if (bx < w) goto m6;
+   s1 = s1 + 1;
+   serve();
+   label m6;
+}
+
+sub serve() {
+   bx = w / 2;
+   by = h / 2;
+   dx = bspeed;
+   dy = bspeed;
+}
+
+sub draw() {
+   rect 20 p1y 15 90 0xFFFFFF;
+   rect pad2x p2y 15 90 0xFFFFFF;
+   rect bx by 15 15 0x00FF00;
+   num 100 10 s1;
+   num s2x 10 s2;
+}

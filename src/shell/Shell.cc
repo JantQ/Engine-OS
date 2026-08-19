@@ -13,6 +13,7 @@
 #include "../Compiler/Compiler.hh"
 #include "../Compiler/Loader.hh"
 #include "../Libs/Crc.hh"
+#include "../Lang/parse.hh"
 
 
 extern "C" UINT8 _binary_RUNTIME_EFI_start[];
@@ -200,6 +201,12 @@ static bool FindGap(UINT64 need, UINT64 align, UINT64 *outStart, UINT64 *outSect
     }
 
     return false;
+}
+
+static bool IsEnFile(const char *name) {
+    UINT32 n = 0;
+    while (name[n]) n++;
+    return n >= 3 && name[n-3] == '.' && name[n-2] == 'e' && name[n-1] == 'n';
 }
 
 static void CmdFree(const char *) {
@@ -580,10 +587,10 @@ static void CmdPlay(const char *args) {
         return;
     }
 
-    INT32 badLine = Script::Load((const char*)scriptBuffer, lenght);
-    if (badLine >= 0) {
+    INT32 bad = IsEnFile(args) ? Parser::Load((const char*)scriptBuffer, lenght) : Script::Load((const char*)scriptBuffer, lenght);
+    if (bad >= 0) {
         Console::Print("bad script line ");
-        Console::PrintUInt((UINT64)badLine);
+        Console::PrintUInt((UINT64)bad);
         Console::Print('\n');
         return;
     }
@@ -718,7 +725,7 @@ static void CmdMake(const char *args) {
         return;
     }
 
-    INT32 bad = Script::Load((const char*)scriptBuffer, size);
+    INT32 bad = IsEnFile(scriptName) ? Parser::Load((const char*)scriptBuffer, size) : Script::Load((const char*)scriptBuffer, size);
     if (bad >= 0) {
         Console::Print("bad script line ");
         Console::PrintUInt((UINT64)bad);

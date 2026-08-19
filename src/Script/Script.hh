@@ -59,12 +59,24 @@ struct ScriptLine {
     UINT32 refLenght;
 };
 
+struct Token {
+    const char *start;
+    UINT32 lenght;
+};
+
 class Script {
     public:
         static INT32 Load(const char *source, UINT64 lenght);
         static bool Step();
         static void RunLoop(bool allowEsc);
         static void FreeArena();
+
+        static void ResetState();
+        static bool ParseStatement(Token *token, UINT32 n, UINT32 srcLine);
+        static INT32 ResolveLables();
+
+        static bool ParseArg(Token &t, ScriptArg *out);
+        static bool ParseVar(Token &t, ScriptArg *out);
 
         struct Lable {
             char name[SCRIPT_NAME_LENGHT];

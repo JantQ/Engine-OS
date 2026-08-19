@@ -9,6 +9,7 @@
 #define ED_VISIBLE 50
 #define ED_MAX_LINES 256
 #define ED_MAX_COLS 120
+#define ED_TAB_WIDTH 3
 
 class Editor {
     public:
@@ -30,7 +31,7 @@ class Editor {
         static inline UINT32 scrollTop = 0;
         static inline char fileName[40];
 
-        static void InsertChar(char c);
+        static bool InsertChar(char c);
         static void BackSpace();
         static void SplitLine();
         static void JoinLine();

@@ -5,11 +5,6 @@
 #include "../input/keyboard.hh"
 #include "../Memory/Framse.hh"
 
-struct Token {
-    const char *start;
-    UINT32 lenght;
-};
-
 static bool TokenIs(Token &t, const char *word) {
     UINT32 i = 0;
     while (i < t.lenght && word[i]) {
@@ -60,7 +55,7 @@ static INT32 FindVarSlot(Token &t) {
     return (INT32)slot;
 }
 
-static bool ParseArg(Token &t, ScriptArg *out) {
+bool Script::ParseArg(Token &t, ScriptArg *out) {
     if (t.lenght == 0) return false;
 
     const char *p = t.start;
@@ -106,7 +101,7 @@ static bool ParseArg(Token &t, ScriptArg *out) {
     return true;
 }
 
-static bool ParseVar(Token &t, ScriptArg *out) {
+bool Script::ParseVar(Token &t, ScriptArg *out) {
     if (t.lenght == 0) return false;
     if (t.start[0] >= '0' && t.start[0] <= '9') return false;
 
@@ -135,6 +130,186 @@ static bool ParseKeyName(Token &t, ScriptArg *out) {
     return false;
 }
 
+void Script::ResetState() {
+    FreeArena();
+    lineCount = 0;
+    pc = 0;
+    varCount = 0;
+    lableCount = 0;
+    stringUsed = 0;
+    callDepth = 0;
+    rngState = Clock::rdtsc() | 1;
+}
+
+bool Script::ParseStatement(Token *toks, UINT32 n, UINT32 srcLine) {
+    if (TokenIs(toks[0], "label")) {
+        if (n != 2 || toks[1].lenght >= SCRIPT_NAME_LENGHT) return false;
+        if (lableCount >= SCRIPT_MAX_LABLES) return false;
+
+        Lable &lb = lables[lableCount++];
+
+        for (UINT32 j = 0; j < toks[1].lenght; j++) {
+            lb.name[j] = toks[1].start[j];
+        }
+        lb.name[toks[1].lenght] = '\0';
+        lb.line = lineCount;
+        return true;
+    }
+
+    if (lineCount >= SCRIPT_MAX_LINES) return false;
+
+    ScriptLine &L = lines[lineCount];
+    L.op = OP_NONE;
+    L.target = -1;
+    L.srcLine = srcLine;
+    L.ref = 0;
+    L.refLenght = 0;
+
+    if (TokenIs(toks[0], "set") || TokenIs(toks[0], "add") || TokenIs(toks[0], "sub")
+        || TokenIs(toks[0], "mul") || TokenIs(toks[0], "div") || TokenIs(toks[0], "rnd")) {
+        if (n != 3) return false;
+        if (TokenIs(toks[0], "set")) L.op = OP_SET;
+        else if (TokenIs(toks[0], "add")) L.op = OP_ADD;
+        else if (TokenIs(toks[0], "sub")) L.op = OP_SUB;
+        else if (TokenIs(toks[0], "mul")) L.op = OP_MUL;
+        else if (TokenIs(toks[0], "div")) L.op = OP_DIV;
+        else L.op = OP_RND;
+
+        if (!ParseVar(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+    }
+    else if (TokenIs(toks[0], "goto")) {
+        if (n != 2) return false;
+        L.op = OP_GOTO;
+        L.ref = toks[1].start;
+        L.refLenght = toks[1].lenght;
+    }
+    else if (TokenIs(toks[0], "gosub")) {
+        if (n != 2) return false;
+        L.op = OP_GOSUB;
+        L.ref = toks[1].start;
+        L.refLenght = toks[1].lenght;
+    }
+    else if (TokenIs(toks[0], "return")) {
+        if (n != 1) return false;
+        L.op = OP_RETURN;
+    }
+    else if (TokenIs(toks[0], "if")) {
+        if (n != 6 || toks[2].lenght != 1) return false;
+        if (!TokenIs(toks[4], "goto")) return false;
+
+        char c = toks[2].start[0];
+        if (c != '=' && c != '!' && c != '<' && c != '>') return false;
+
+        L.op = OP_IF;
+        L.cmp = c;
+        if (!ParseArg(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[3], &L.b)) return false;
+        L.ref = toks[5].start;
+        L.refLenght = toks[5].lenght;
+    }
+    else if (TokenIs(toks[0], "rect")) {
+        if (n != 6) return false;
+        L.op = OP_RECT;
+        if (!ParseArg(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+        if (!ParseArg(toks[3], &L.c)) return false;
+        if (!ParseArg(toks[4], &L.d)) return false;
+        if (!ParseArg(toks[5], &L.e)) return false;
+    }
+    else if (TokenIs(toks[0], "text")) {
+        if (n != 4) return false;
+        if (Script::stringUsed + toks[3].lenght + 1 > SCRIPT_STRING_POOL) return false;
+        L.op = OP_TEXT;
+        if (!ParseArg(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+        L.strOffset = Script::stringUsed;
+        for (UINT32 j = 0; j < toks[3].lenght; j++) Script::stringPool[Script::stringUsed++] = toks[3].start[j];
+        Script::stringPool[Script::stringUsed++] = '\0';
+    }
+    else if (TokenIs(toks[0], "num")) {
+        if (n != 4) return false;
+        L.op = OP_NUM;
+        if (!ParseArg(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+        if (!ParseArg(toks[3], &L.c)) return false;
+    }
+    else if (TokenIs(toks[0], "key")) {
+        if (n != 3) return false;
+        L.op = OP_KEY;
+        if (!ParseKeyName(toks[1], &L.b)) return false;
+        if (!ParseVar(toks[2], &L.a)) return false;
+    }
+    else if (TokenIs(toks[0], "screen")) {
+        if (n != 3) return false;
+        L.op = OP_SCREEN;
+        if (!ParseVar(toks[1], &L.a)) return false;
+        if (!ParseVar(toks[2], &L.b)) return false;
+    }
+    else if (TokenIs(toks[0], "millis")) {
+        if (n != 2) return false;
+        L.op = OP_MILLIS;
+        if (!ParseVar(toks[1], &L.a)) return false;
+    }
+    else if (TokenIs(toks[0], "wait")) {
+        if (n != 2) return false;
+        L.op = OP_WAIT;
+        if (!ParseArg(toks[1], &L.a)) return false;
+    }
+    else if (TokenIs(toks[0], "alloc")) {
+        if (n != 3) return false;
+        L.op = OP_ALLOC;
+        if (!ParseVar(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+    }
+    else if (TokenIs(toks[0], "poke")) {
+        if (n != 4) return false;
+        L.op = OP_POKE;
+        if (!ParseArg(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+        if (!ParseArg(toks[3], &L.c)) return false;
+    }
+    else if (TokenIs(toks[0], "peek")) {
+        if (n != 4) return false;
+        L.op = OP_PEEK;
+        if (!ParseArg(toks[1], &L.a)) return false;
+        if (!ParseArg(toks[2], &L.b)) return false;
+        if (!ParseVar(toks[3], &L.c)) return false;
+    }
+    else if (TokenIs(toks[0], "flip")) {
+        L.op = OP_FLIP;
+    }
+    else if (TokenIs(toks[0], "end")) {
+        L.op = OP_END;
+    }
+    else {
+        return false;
+    }
+
+    lineCount++;
+    return true;
+}
+
+INT32 Script::ResolveLables() {
+    for (UINT32 i = 0; i < lineCount; i++) {
+        ScriptLine &L = Script::lines[i];
+        if (!L.ref) continue;
+
+        L.target = -1;
+        for (UINT32 lb = 0; lb < Script::lableCount; lb++) {
+            UINT32 j = 0;
+            while (j < L.refLenght && Script::lables[lb].name[j] == L.ref[j]) j++;
+            if (j == L.refLenght && Script::lables[lb].name[j] == '\0') {
+                L.target = (INT32)Script::lables[lb].line;
+                break;
+            }
+        }
+        if (L.target < 0) return (INT32)L.srcLine;
+    }
+
+    return -1;
+}
+
 INT64 Script::Val(ScriptArg &arg) {
     return arg.isVar ? Script::vars[arg.value] : arg.value;
 }
@@ -147,15 +322,7 @@ UINT64 Script::Rand() {
 }
 
 INT32 Script::Load(const char *source, UINT64 lenght) {
-    FreeArena();
-
-    lineCount = 0;
-    pc = 0;
-    Script::varCount = 0;
-    Script::lableCount = 0;
-    Script::stringUsed = 0;
-    Script::callDepth = 0;
-    Script::rngState = Clock::rdtsc() | 1;
+    ResetState();
 
     const char *p = source;
     const char *end = source + lenght;
@@ -207,169 +374,11 @@ INT32 Script::Load(const char *source, UINT64 lenght) {
         p = lineEnd < end ? lineEnd + 1 : end;
 
         if (n == 0) continue;
-        if (lineCount >= SCRIPT_MAX_LINES) return srcLine;
-
-        ScriptLine &L = Script::lines[lineCount];
-        L.op = OP_NONE;
-        L.target = -1;
-        L.srcLine = (UINT32)srcLine;
-        L.ref = 0;
-        L.refLenght = 0;
-
-        if (TokenIs(toks[0], "label")) {
-            if (n != 2 || toks[1].lenght >= SCRIPT_NAME_LENGHT) return srcLine;
-            if (Script::lableCount >= SCRIPT_MAX_LABLES) return srcLine;
-
-            Lable &lb = Script::lables[Script::lableCount++];
-            for (UINT32 j = 0; j < toks[1].lenght; j++) lb.name[j] = toks[1].start[j];
-            lb.name[toks[1].lenght] = '\0';
-            lb.line = lineCount;
-            continue;
-        }
-
-        if (TokenIs(toks[0], "set") || TokenIs(toks[0], "add") || TokenIs(toks[0], "sub")
-            || TokenIs(toks[0], "mul") || TokenIs(toks[0], "div") || TokenIs(toks[0], "rnd")) {
-            if (n != 3) return srcLine;
-            if (TokenIs(toks[0], "set")) L.op = OP_SET;
-            else if (TokenIs(toks[0], "add")) L.op = OP_ADD;
-            else if (TokenIs(toks[0], "sub")) L.op = OP_SUB;
-            else if (TokenIs(toks[0], "mul")) L.op = OP_MUL;
-            else if (TokenIs(toks[0], "div")) L.op = OP_DIV;
-            else L.op = OP_RND;
-
-            if (!ParseVar(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "goto")) {
-            if (n != 2) return srcLine;
-            L.op = OP_GOTO;
-            L.ref = toks[1].start;
-            L.refLenght = toks[1].lenght;
-        }
-        else if (TokenIs(toks[0], "gosub")) {
-            if (n != 2) return srcLine;
-            L.op = OP_GOSUB;
-            L.ref = toks[1].start;
-            L.refLenght = toks[1].lenght;
-        }
-        else if (TokenIs(toks[0], "return")) {
-            if (n != 1) return srcLine;
-            L.op = OP_RETURN;
-        }
-        else if (TokenIs(toks[0], "if")) {
-            if (n != 6 || toks[2].lenght != 1) return srcLine;
-            if (!TokenIs(toks[4], "goto")) return srcLine;
-
-            char c = toks[2].start[0];
-            if (c != '=' && c != '!' && c != '<' && c != '>') return srcLine;
-
-            L.op = OP_IF;
-            L.cmp = c;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[3], &L.b)) return srcLine;
-            L.ref = toks[5].start;
-            L.refLenght = toks[5].lenght;
-        }
-        else if (TokenIs(toks[0], "rect")) {
-            if (n != 6) return srcLine;
-            L.op = OP_RECT;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-            if (!ParseArg(toks[3], &L.c)) return srcLine;
-            if (!ParseArg(toks[4], &L.d)) return srcLine;
-            if (!ParseArg(toks[5], &L.e)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "text")) {
-            if (n != 4) return srcLine;
-            if (Script::stringUsed + toks[3].lenght + 1 > SCRIPT_STRING_POOL) return srcLine;
-
-            L.op = OP_TEXT;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-
-            L.strOffset = Script::stringUsed;
-            for (UINT32 j = 0; j < toks[3].lenght; j++) Script::stringPool[Script::stringUsed++] = toks[3].start[j];
-            Script::stringPool[Script::stringUsed++] = '\0';
-        }
-        else if (TokenIs(toks[0], "num")) {
-            if (n != 4) return srcLine;
-            L.op = OP_NUM;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-            if (!ParseArg(toks[3], &L.c)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "key")) {
-            if (n != 3) return srcLine;
-            L.op = OP_KEY;
-            if (!ParseKeyName(toks[1], &L.b)) return srcLine;
-            if (!ParseVar(toks[2], &L.a)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "screen")) {
-            if (n != 3) return srcLine;
-            L.op = OP_SCREEN;
-            if (!ParseVar(toks[1], &L.a)) return srcLine;
-            if (!ParseVar(toks[2], &L.b)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "millis")) {
-            if (n != 2) return srcLine;
-            L.op = OP_MILLIS;
-            if (!ParseVar(toks[1], &L.a)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "wait")) {
-            if (n != 2) return srcLine;
-            L.op = OP_WAIT;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "alloc")) {
-            if (n != 3) return srcLine;
-            L.op = OP_ALLOC;
-            if (!ParseVar(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "poke")) {
-            if (n != 4) return srcLine;
-            L.op = OP_POKE;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-            if (!ParseArg(toks[3], &L.c)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "peek")) {
-            if (n != 4) return srcLine;
-            L.op = OP_PEEK;
-            if (!ParseArg(toks[1], &L.a)) return srcLine;
-            if (!ParseArg(toks[2], &L.b)) return srcLine;
-            if (!ParseVar(toks[3], &L.c)) return srcLine;
-        }
-        else if (TokenIs(toks[0], "flip")) {
-            L.op = OP_FLIP;
-        }
-        else if (TokenIs(toks[0], "end")) {
-            L.op = OP_END;
-        }
-        else {
-            return srcLine;
-        }
-
-        lineCount++;
+        
+        if (!ParseStatement(toks, n, (UINT32)srcLine)) return srcLine;
     }
 
-    for (UINT32 i = 0; i < lineCount; i++) {
-        ScriptLine &L = Script::lines[i];
-        if (!L.ref) continue;
-
-        L.target = -1;
-        for (UINT32 lb = 0; lb < Script::lableCount; lb++) {
-            UINT32 j = 0;
-            while (j < L.refLenght && Script::lables[lb].name[j] == L.ref[j]) j++;
-            if (j == L.refLenght && Script::lables[lb].name[j] == '\0') {
-                L.target = (INT32)Script::lables[lb].line;
-                break;
-            }
-        }
-        if (L.target < 0) return (INT32)L.srcLine;
-    }
-
-    return -1;
+    return ResolveLables();
 }
 
 bool Script::Step() {

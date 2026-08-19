@@ -88,18 +88,19 @@ void Editor::ScrollToCursor() {
     if (curLine >= scrollTop + ED_VISIBLE) scrollTop = curLine - ED_VISIBLE + 1;
 }
 
-void Editor::InsertChar(char c) {
+bool Editor::InsertChar(char c) {
     UINT32 lenght = lengths[curLine];
-    if (lenght >= ED_MAX_COLS - 1) return;
+    if (lenght >= ED_MAX_COLS - 1) return false;
 
     for (UINT32 i = lenght; i > curCol; i--) {
         lines[curLine][i] = lines[curLine][i - 1];
     }
     lines[curLine][curCol] = c;
-    
+
     lengths[curLine] = lenght + 1;
     curCol++;
     dirty = true;
+    return true;
 }
 
 void Editor::JoinLine() {
@@ -206,6 +207,17 @@ void Editor::Update(UINT16 key) {
         char c = (char)key;
         if (c == '\n') SplitLine();
         else if (c == '\b') BackSpace();
+        else if (c == '\t') {
+            for (UINT32 i = 0; i < ED_TAB_WIDTH; i++) InsertChar(' ');
+        }
+        else if (c == '{' || c == '(') {
+            char close = (c == '{') ? '}' : ')';
+            if (InsertChar(c) && InsertChar(close)) curCol--;
+        }
+        else if (c == '}' || c == ')') {
+            if (curCol < lengths[curLine] && lines[curLine][curCol] == c) curCol++;
+            else InsertChar(c);
+        }
         else if (c >= 32) InsertChar(c);
     }
 

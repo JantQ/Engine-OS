@@ -1,0 +1,171 @@
+screen w h;
+
+int cell = 20;
+int gw = w / cell;
+int gh = h / cell;
+
+// body arrays
+alloc bx 500;
+alloc by 500;
+
+int len = 3;
+int hx = gw / 2;
+int hy = gh / 2;
+int dx = 1;
+int dy = 0;
+
+initbody();
+newfood();
+
+label loop;
+input();
+move();
+draw();
+wait 110;
+flip;
+goto loop;
+
+sub initbody() {
+   int i = 0;
+   int t = 0;
+   label ib1;
+   t = hx - i;
+   poke bx i t;
+   poke by i hy;
+   i = i + 1;
+   if (i < len) goto ib1;
+}
+
+sub input() {
+   key right k;
+   if (k == 0) goto k1;
+   if (dx == -1) goto k1;
+   dx = 1;
+   dy = 0;
+   label k1;
+
+   key left k;
+   if (k == 0) goto k2;
+   if (dx == 1) goto k2;
+   dx = -1;
+   dy = 0;
+   label k2;
+
+   key up k;
+   if (k == 0) goto k3;
+   if (dy == 1) goto k3;
+   dx = 0;
+   dy = -1;
+   label k3;
+
+   key down k;
+   if (k == 0) goto k4;
+   if (dy == -1) goto k4;
+   dx = 0;
+   dy = 1;
+   label k4;
+}
+
+sub move() {
+   shiftbody();
+   hx = hx + dx;
+   hy = hy + dy;
+   poke bx 0 hx;
+   poke by 0 hy;
+   walls();
+   selfbite();
+   food();
+}
+
+sub shiftbody() {
+   int j = 0;
+   i = len - 1;
+   label sh1;
+   if (i < 1) goto sh2;
+   j = i - 1;
+   peek bx j t;
+   poke bx i t;
+   peek by j t;
+   poke by i t;
+   i = i - 1;
+   goto sh1;
+   label sh2;
+}
+
+sub walls() {
+   if (hx < 0) goto dead;
+   if (hy < 0) goto dead;
+   if (hx < gw) goto w1;
+   goto dead;
+   label w1;
+   if (hy < gh) goto w2;
+   goto dead;
+   label w2;
+}
+
+sub selfbite() {
+   i = 1;
+   label sb1;
+   if (i < len) goto sb2;
+   return;
+   label sb2;
+   peek bx i t;
+   if (t != hx) goto sb3;
+   peek by i t;
+   if (t == hy) goto dead;
+   label sb3;
+   i = i + 1;
+   goto sb1;
+}
+
+sub food() {
+   if (hx != fx) goto f1;
+   if (hy != fy) goto f1;
+   int tail = len - 1;
+   peek bx tail tx;
+   peek by tail ty;
+   poke bx len tx;
+   poke by len ty;
+   len = len + 1;
+   if (len < 500) goto f2;
+   len = 499;
+   label f2;
+   newfood();
+   label f1;
+}
+
+sub newfood() {
+   rnd fx gw;
+   rnd fy gh;
+}
+
+sub draw() {
+   int px = fx * cell;
+   int py = fy * cell;
+   rect px py cell cell 0xFF0000;
+
+   int u = 0;
+   i = 0;
+   label d1;
+   if (i < len) goto d2;
+   goto d3;
+   label d2;
+   peek bx i t;
+   t = t * cell;
+   peek by i u;
+   u = u * cell;
+   rect t u cell cell 0x00FF00;
+   i = i + 1;
+   goto d1;
+   label d3;
+
+   int sc = len - 3;
+   num 10 10 sc;
+}
+
+label dead;
+text 100 100 "GAME OVER";
+num 100 140 sc;
+flip;
+wait 2000;
+end;

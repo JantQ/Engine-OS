@@ -41,7 +41,7 @@ class Keyboard {
 
    static constexpr char scanCodeSet1[] = {
    0, 0 /*Esc*/, '1','2','3','4','5','6','7','8','9','0','+', 0 /* ´ UnSupported*/, '\b' /*Backspace*/,
-   0 /*Tab*/, 'q','w','e','r','t','y','u','i','o','p','\x01' /*Å*/, 0 /*¨ dead key*/, '\n' /*Enter*/,
+   '\t' /*Tab*/, 'q','w','e','r','t','y','u','i','o','p','\x01' /*Å*/, 0 /*¨ dead key*/, '\n' /*Enter*/,
    0 /*Ctrl*/, 'a','s','d','f','g','h','j','k','l','\x03' /*Ö*/,'\x02' /*Ä*/, 0 /* ' UnSupported*/,
    0 /*LShift*/, '\'' /*ISO extra key*/, 'z','x','c','v','b','n','m',',','.','-', 0 /*RShift*/,
    '*', 0 /*Alt*/, ' ' /*Space*/};
@@ -51,7 +51,7 @@ class Keyboard {
    0, 0, '!','"','#', 0 /*unsupported ¤*/, '%','&','/','(',')','=','?', 0,
    0, 0, 'Q','W','E','R','T','Y','U','I','O','P','\x01', 0 /*¨*/, 0,
    0, 'A','S','D','F','G','H','J','K','L','\x03','\x02', 0,
-   0, 0, 'Z','X','C','V','B','N','M',';',':','_', 0,
+   0, '*' /*ISO extra key*/, 'Z','X','C','V','B','N','M',';',':','_', 0,
    '*', 0, ' '};
 
    static constexpr char scanCodeSet1AltGr[] = {
