@@ -1,4 +1,4 @@
-# Engine-OS
+ava# Engine-OS
 
 Engine-OS is supposed to be an operating system that allows you to create games *inside* the operating system and distribute them as standalone bootable `.EFI` files. 
 
@@ -12,7 +12,7 @@ You write a game in the built in editor and compile it against the runtime kerne
 - Some type of small shell with commands, Type `help` for the available command list
 - "neenor" is the built in text editor that lets you create files into the EnFS filesystem
 
-- **EnScript** is our own scripting language, Reference to this can be found in [ENSCRIPT.md](ENSCRIPT.md). This language is a bit Assembly flavoured but meant to change to more C like language later. For reference code you can see [pong](Games/pong.en) or [snake](Games/snake.en). (Realized that .es files show as typescript so changed to .en)
+- **EnScript** is our own scripting language, Reference to this can be found in [ENSCRIPT.md](ENSCRIPT.md). This language is a bit Assembly flavoured but meant to change to more C like language later. For reference code you can see [pong](Games/pong.en) or [snake](Games/snake.en). (Realized that .es files show as javascript so changed to .en)
 
 - **AOT compiler** works halfly
 
