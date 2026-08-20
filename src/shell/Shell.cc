@@ -12,7 +12,6 @@
 #include "../Memory/Paging.hh"
 #include "../Compiler/Compiler.hh"
 #include "../Compiler/Loader.hh"
-#include "../Libs/Crc.hh"
 #include "../Lang/parse.hh"
 
 
@@ -589,9 +588,10 @@ static void CmdPlay(const char *args) {
 
     INT32 bad = IsEnFile(args) ? Parser::Load((const char*)scriptBuffer, lenght) : Script::Load((const char*)scriptBuffer, lenght);
     if (bad >= 0) {
-        Console::Print("bad script line ");
+        Console::Print("line ");
         Console::PrintUInt((UINT64)bad);
-        Console::Print('\n');
+        Console::Print(": ");
+        Console::Println(IsEnFile(args) && Parser::errorMsg ? Parser::errorMsg : "bad script");
         return;
     }
 
@@ -613,6 +613,37 @@ static UINT8 *FindGameMagic(UINT8 *blob, UINT64 size) {
         if (hit) return blob + i;
     }
     return 0;
+}
+
+static UINT64 BuildImage(UINT8 *out, UINT64 cap, UINT32 *badLine) {
+    if (cap < sizeof(EnExeHeader) + Script::stringUsed) return 0;
+
+    UINT64 codeCap = cap - sizeof(EnExeHeader) - Script::stringUsed;
+    UINT64 codeBytes = Compiler::Compile(out + sizeof(EnExeHeader), codeCap, badLine);
+    if (!codeBytes) return 0;
+
+    UINT64 stringOffset = sizeof(EnExeHeader) + codeBytes;
+    for (UINT32 i = 0; i < Script::stringUsed; i++) {
+        out[stringOffset + i] = (UINT8)Script::stringPool[i];
+    }
+    UINT64 totatl = stringOffset + Script::stringUsed;
+
+    EnExeHeader *header = (EnExeHeader*)out;
+    for (UINT32 i = 0; i < ENEXE_MAGIC_BYTES; i++) {
+        header->magic[i] = ENEXE_MAGIC[i];
+    }
+
+    header->formatVersion = ENEXE_FORMAT;
+    header->ctxVersion = ENEXE_CTX_VERSION;
+    header->codeOffset = sizeof(EnExeHeader);
+    header->codeBytes = codeBytes;
+    header->entryOffset = 0;
+    header->stringOffset = stringOffset;
+    header->stringBytes = Script::stringUsed;
+    header->varCount = Script::varCount;
+    header->crc32 = EnExeCrc(out, totatl);
+
+    return totatl;
 }
 
 static void CmdExport(const char *args) {
@@ -646,17 +677,33 @@ static void CmdExport(const char *args) {
         return;
     }
 
-    INT32 badLine = Script::Load((const char*)scriptBuffer, lenght);
-    if (badLine >= 0) {
-        Console::Print("bad script line ");
-        Console::PrintUInt((UINT64)badLine);
+    INT32 bad = IsEnFile(scriptName) ? Parser::Load((const char*)scriptBuffer, lenght) : Script::Load((const char*)scriptBuffer, lenght);
+    if (bad >= 0) {
+        Console::Print("line ");
+        Console::PrintUInt(bad);
+        Console::Print(": ");
+        Console::Println(IsEnFile(scriptName) && Parser::errorMsg ? Parser::errorMsg : "bad script");
+        return;
+    }
+
+    if (!buildBuffer) buildBuffer = (UINT8*)Heap::Alloc(ENEXE_MAX_BYTES);
+    if (!buildBuffer) {
+        Console::Println("alloc failed");
+        return;
+    }
+
+    UINT32 badLine = 0;
+    UINT64 total = BuildImage(buildBuffer, ENEXE_MAX_BYTES, &badLine);
+    if (!total) {
+        Console::Print("cannot compile line ");
+        Console::PrintUInt(badLine);
         Console::Print('\n');
         return;
     }
 
     UINT64 blobSize = (UINT64)(_binary_RUNTIME_EFI_end - _binary_RUNTIME_EFI_start);
 
-    if (!exportBuffer) exportBuffer = (UINT8*)Heap::Alloc(blobSize, 16);
+    if (!exportBuffer) exportBuffer = (UINT8*)Heap::Alloc(blobSize);
     if (!exportBuffer) {
         Console::Println("alloc failed");
         return;
@@ -673,10 +720,10 @@ static void CmdExport(const char *args) {
     }
 
     for (UINT32 i = 0; i < 8; i++) {
-        slot[GAME_MAGIC_LENGHT + i] = (UINT8)(lenght >> (i * 8));
+        slot[GAME_MAGIC_LENGHT + i] = (UINT8)(total >> (i * 8));
     }
-    for (UINT64 i = 0; i < SCRIPT_MAX_SOURCE; i++) {
-        slot[GAME_HEADER_BYTES + i] = i < lenght ? scriptBuffer[i] : 0;
+    for (UINT64 i = 0; i < ENEXE_MAX_BYTES; i++) {
+        slot[GAME_HEADER_BYTES+ i] = i < total ? buildBuffer[i] : 0;
     }
 
     r = EnFS::WriteFile(args, exportBuffer, blobSize);
@@ -727,42 +774,21 @@ static void CmdMake(const char *args) {
 
     INT32 bad = IsEnFile(scriptName) ? Parser::Load((const char*)scriptBuffer, size) : Script::Load((const char*)scriptBuffer, size);
     if (bad >= 0) {
-        Console::Print("bad script line ");
+        Console::Print("line ");
         Console::PrintUInt((UINT64)bad);
-        Console::Print('\n');
+        Console::Print(": ");
+        Console::Println(IsEnFile(scriptName) && Parser::errorMsg ? Parser::errorMsg : "bad script");
         return;
     }
 
-    UINT64 codeCap = ENEXE_MAX_BYTES - sizeof(EnExeHeader) - Script::stringUsed;
     UINT32 badLine = 0;
-    UINT64 codeBytes = Compiler::Compile(buildBuffer + sizeof(EnExeHeader), codeCap, &badLine);
-
-    if (!codeBytes) {
-        Console::Print("cannot compile line ");
+    UINT64 total = BuildImage(buildBuffer, ENEXE_MAX_BYTES, &badLine);
+    if (!total) {
+        Console::Print("Cannot compile line ");
         Console::PrintUInt((UINT64)badLine);
         Console::Print('\n');
         return;
     }
-
-    UINT64 stringOffset = sizeof(EnExeHeader) + codeBytes;
-    for (UINT32 i = 0; i < Script::stringUsed; i++) {
-        buildBuffer[stringOffset + i] = (UINT8)Script::stringPool[i];
-    }
-    UINT64 total = stringOffset + Script::stringUsed;
-
-    EnExeHeader *header = (EnExeHeader*)buildBuffer;
-    for (UINT32 i = 0; i < ENEXE_MAGIC_BYTES; i++) {
-        header->magic[i] = ENEXE_MAGIC[i];
-    }
-    header->formatVersion = ENEXE_FORMAT;
-    header->ctxVersion = ENEXE_CTX_VERSION;
-    header->codeOffset = sizeof(EnExeHeader);
-    header->codeBytes = codeBytes;
-    header->entryOffset = 0;
-    header->stringOffset = stringOffset;
-    header->stringBytes = Script::stringUsed;
-    header->varCount = Script::varCount;
-    header->crc32 = EnExeCrc(buildBuffer, total);
 
     res = EnFS::WriteFile(args, buildBuffer, total);
     if (res != ENFS_OK) {
@@ -774,7 +800,7 @@ static void CmdMake(const char *args) {
     Console::Print("made ");
     Console::Print(args);
     Console::Print(" code ");
-    Console::PrintUInt(codeBytes);
+    Console::PrintUInt(((EnExeHeader*)buildBuffer)->codeBytes);
     Console::Print(" strings ");
     Console::PrintUInt(Script::stringUsed);
     Console::Print(" total ");

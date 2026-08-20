@@ -14,7 +14,7 @@ C_SRC = $(shell find src -path src/Runtime -prune -o -name '*.c' -print)
 CC_SRC = $(shell find src -path src/Runtime -prune -o -name '*.cc' -print)
 HEADERS = $(shell find src -name '*.h') $(shell find src -name '*.hh')
 
-RT_SRC = $(shell find src/Runtime src/Script src/Graphics src/Clock src/input src/Memory -name '*.cc') src/Text.cc
+RT_SRC = $(shell find src/Runtime src/Script src/Graphics src/Clock src/input src/Memory src/Engine -name '*.cc') src/Text.cc src/Compiler/RunImage.cc
 
 C_OBJ = $(patsubst src/%.c, $(BUILD_DIR)/%.o, $(C_SRC))
 CC_OBJ = $(patsubst src/%.cc, $(BUILD_DIR)/%.o, $(CC_SRC))

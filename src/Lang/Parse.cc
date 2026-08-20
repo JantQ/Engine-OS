@@ -13,6 +13,7 @@ struct LexTok {
     char punct;
     char punct2;
     Token word;
+    const char *at;
     UINT32 line;
 };
 
@@ -99,6 +100,7 @@ static LexTok LexOne() {
     }
 
     t.line = srcLine;
+    t.at = sp;
     if (sp >= send) return t;
 
     if (*sp == '"') {
@@ -145,8 +147,15 @@ static LexTok Next() {
     return t;
 }
 
-static bool Fail(UINT32 line) {
-    if (!badLine) badLine = line;
+static const char *badMsg;
+static const char *badAt;
+
+static bool Fail(const LexTok &t, const char *what) {
+    if (!badLine) {
+        badLine = t.line;
+        badMsg = what;
+        badAt = t.at;
+    }
     return false;
 }
 
@@ -209,13 +218,13 @@ static bool EmitOp2(UINT8 op, const ScriptArg &a, const ScriptArg &b, UINT32 lin
     return true;
 }
 
-static bool Materialize(ScriptArg *v, UINT32 line) {
+static bool Materialize(ScriptArg *v, const LexTok &t) {
     if (IsTemp(*v)) return true;
 
-    ScriptArg t;
-    if (!NewTemp(&t)) return Fail(line);
-    if (!EmitOp2(OP_SET, t, *v, line)) return Fail(line);
-    *v = t;
+    ScriptArg s;
+    if (!NewTemp(&s)) return Fail(t, "expression too complex");
+    if (!EmitOp2(OP_SET, s, *v, t.line)) return Fail(t, "script too long");
+    *v = s;
     return true;
 }
 
@@ -225,14 +234,14 @@ static bool Primary(ScriptArg *out) {
     if (t.kind == TK_PUNCT && t.punct == '(') {
         Next();
         if (!Expr(out)) return false;
-        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ')') return Fail(t.line);
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ')') return Fail(Peek(0), "expected ')'");
         Next();
         return true;
     }
 
-    if (t.kind != TK_WORD) return Fail(t.line);
+    if (t.kind != TK_WORD) return Fail(t, "expected a value");
     Next();
-    if (!Script::ParseArg(t.word, out)) return Fail(t.line);
+    if (!Script::ParseArg(t.word, out)) return Fail(t, "not a valid number or name");
     return true;
 }
 
@@ -255,9 +264,9 @@ static bool Unary(ScriptArg *out) {
         zero.isVar = false;
         zero.value = 0;
 
-        if (!NewTemp(out)) return Fail(t.line);
-        if (!EmitOp2(OP_SET, *out, zero, t.line)) return Fail(t.line);
-        if (!EmitOp2(OP_SUB, *out, v, t.line)) return Fail(t.line);
+        if (!NewTemp(out)) return Fail(t, "expression too complex");
+        if (!EmitOp2(OP_SET, *out, zero, t.line)) return Fail(t, "script too long");
+        if (!EmitOp2(OP_SUB, *out, v, t.line)) return Fail(t, "script too long");
         return true;
     }
 
@@ -273,11 +282,11 @@ static bool Term(ScriptArg *out) {
         if (t.punct != '*' && t.punct != '/') return true;
         Next();
 
-        if (!Materialize(out, t.line)) return false;
+        if (!Materialize(out, t)) return false;
 
         ScriptArg rhs;
         if (!Unary(&rhs)) return false;
-        if (!EmitOp2(t.punct == '*' ? OP_MUL : OP_DIV, *out, rhs, t.line)) return Fail(t.line);
+        if (!EmitOp2(t.punct == '*' ? OP_MUL : OP_DIV, *out, rhs, t.line)) return Fail(t, "script too long");
     }
 }
 
@@ -290,11 +299,11 @@ static bool Expr(ScriptArg *out) {
         if (t.punct != '+' && t.punct != '-') return true;
         Next();
 
-        if (!Materialize(out, t.line)) return false;
+        if (!Materialize(out, t)) return false;
 
         ScriptArg rhs;
         if (!Term(&rhs)) return false;
-        if (!EmitOp2(t.punct == '+' ? OP_ADD : OP_SUB, *out, rhs, t.line)) return Fail(t.line);
+        if (!EmitOp2(t.punct == '+' ? OP_ADD : OP_SUB, *out, rhs, t.line)) return Fail(t, "script too long");
     }
 }
 
@@ -320,7 +329,7 @@ static INT32 EmitIf(const ScriptArg &a, const ScriptArg &b, char cmp, UINT8 neg,
 }
 
 static bool Condition(ScriptArg *a, ScriptArg *b, char *cmp, UINT32 line) {
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '(') return Fail(line);
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '(') return Fail(Peek(0), "expected '(' after if");
     Next();
 
     if (!Expr(a)) return false;
@@ -335,12 +344,12 @@ static bool Condition(ScriptArg *a, ScriptArg *b, char *cmp, UINT32 line) {
         else if (op.punct == '<' && op.punct2 == 0) c = '<';
         else if (op.punct == '>' && op.punct2 == 0) c = '>';
     }
-    if (!c) return Fail(op.line);
+    if (!c) return Fail(op, "expected a comparison operator");
     Next();
 
     if (!Expr(b)) return false;
 
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ')') return Fail(line);
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ')') return Fail(Peek(0), "expected ')'");
     Next();
 
     *cmp = c;
@@ -348,11 +357,11 @@ static bool Condition(ScriptArg *a, ScriptArg *b, char *cmp, UINT32 line) {
 }
 
 static bool Block(UINT32 line) {
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '{') return Fail(line);
-    Next();
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '{') return Fail(Peek(0), "expected '{'");
+    LexTok brace = Next();
 
     while (!(Peek(0).kind == TK_PUNCT && Peek(0).punct == '}')) {
-        if (Peek(0).kind == TK_END) return Fail(line);
+        if (Peek(0).kind == TK_END) return Fail(brace, "unclosed '}'");
         if (!Statement()) return false;
     }
     Next();
@@ -371,12 +380,12 @@ static bool IfStatement() {
         Next();
 
         LexTok target = Next();
-        if (target.kind != TK_WORD) return Fail(kw.line);
-        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(kw.line);
+        if (target.kind != TK_WORD) return Fail(target, "expected a label name after goto");
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
         Next();
 
         INT32 at = EmitIf(a, b, cmp, 0, kw.line);
-        if (at < 0) return Fail(kw.line);
+        if (at < 0) return Fail(kw, "script too long");
 
         Script::lines[at].ref = target.word.start;
         Script::lines[at].refLenght = target.word.lenght;
@@ -384,7 +393,7 @@ static bool IfStatement() {
     }
 
     INT32 skip = EmitIf(a, b, cmp, 1, kw.line);
-    if (skip < 0) return Fail(kw.line);
+    if (skip < 0) return Fail(kw, "script too long");
 
     if (!Block(kw.line)) return false;
 
@@ -392,7 +401,7 @@ static bool IfStatement() {
         Next();
 
         UINT32 jmp = Script::lineCount;
-        if (!EmitBare(OP_GOTO, kw.line)) return Fail(kw.line);
+        if (!EmitBare(OP_GOTO, kw.line)) return Fail(kw, "script too long");
 
         Script::lines[skip].target = (INT32)Script::lineCount;
 
@@ -421,12 +430,12 @@ static bool WhileStatement() {
     if (!Condition(&a, &b, &cmp, kw.line)) return false;
 
     INT32 exit = EmitIf(a, b, cmp, 1, kw.line);
-    if (exit < 0) return Fail(kw.line);
+    if (exit < 0) return Fail(kw, "script too long");
 
     if (!Block(kw.line)) return false;
 
     UINT32 back = Script::lineCount;
-    if (!EmitBare(OP_GOTO, kw.line)) return Fail(kw.line);
+    if (!EmitBare(OP_GOTO, kw.line)) return Fail(kw, "script too long");
     Script::lines[back].target = (INT32)top;
 
     Script::lines[exit].target = (INT32)Script::lineCount;
@@ -435,7 +444,7 @@ static bool WhileStatement() {
 
 static bool Statement() {
     LexTok first = Peek(0);
-    if (first.kind == TK_END) return Fail(first.line);
+    if (first.kind == TK_END) return Fail(first, "unexpected end of file");
 
     tempNext = 0;
 
@@ -450,15 +459,15 @@ static bool Statement() {
         Next();
 
         ScriptArg dst;
-        if (!Script::ParseVar(name.word, &dst)) return Fail(name.line);
+        if (!Script::ParseVar(name.word, &dst)) return Fail(name, "not a valid variable name");
 
         ScriptArg val;
         if (!Expr(&val)) return false;
 
-        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(name.line);
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
         Next();
 
-        if (!EmitOp2(OP_SET, dst, val, name.line)) return Fail(name.line);
+        if (!EmitOp2(OP_SET, dst, val, name.line)) return Fail(name, "script too long");
         return true;
     }
 
@@ -468,11 +477,11 @@ static bool Statement() {
             Next();
             Next();
 
-            if (Peek(0).punct != ';') return Fail(first.line);
+            if (Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
 
             Next();
 
-            if (!EmitRef(OP_GOSUB, first.word, first.line)) return Fail(first.line);
+            if (!EmitRef(OP_GOSUB, first.word, first.line)) return Fail(first, "script too long");
             
             return true;
     }
@@ -480,38 +489,50 @@ static bool Statement() {
     Token toks[8];
     UINT32 n = 0;
     while (Peek(0).kind == TK_WORD || Peek(0).kind == TK_STRING) {
-        if (n >= 8) return Fail(first.line);
+        if (n >= 8) return Fail(Peek(0), "too many words in statement");
         toks[n++] = Next().word;
     }
-    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(first.line);
+    if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
     Next();
 
-    if (n == 0) return Fail(first.line);
-    if (!Script::ParseStatement(toks, n, first.line)) return Fail(first.line);
+    if (n == 0) return Fail(first, "expected a statement");
+    if (!Script::ParseStatement(toks, n, first.line)) return Fail(first, "unknown or malformed command");
     return true;
 }
 
 static bool Sub() {
     LexTok kw = Next();
     LexTok name = Next();
-    if (name.kind != TK_WORD) return Fail(kw.line);
+    if (name.kind != TK_WORD) return Fail(name, "expected a name after sub");
 
-    if (Peek(0).punct != '(') return Fail(name.line);
+    if (Peek(0).punct != '(') return Fail(Peek(0), "expected '('");
     Next();
-    if (Peek(0).punct != ')') return Fail(name.line);
+    if (Peek(0).punct != ')') return Fail(Peek(0), "expected ')'");
     Next();
 
     UINT32 skip = Script::lineCount;
-    if (!EmitBare(OP_GOTO, name.line)) return Fail(name.line);
+    if (!EmitBare(OP_GOTO, name.line)) return Fail(name, "script too long");
 
-    if (!EmitLabel(name.word)) return Fail(name.line);
+    if (!EmitLabel(name.word)) return Fail(name, "sub name too long or too many subs");
 
     if (!Block(name.line)) return false;
 
-    if (!EmitBare(OP_RETURN, name.line)) return Fail(name.line);
+    if (!EmitBare(OP_RETURN, name.line)) return Fail(name, "script too long");
 
     Script::lines[skip].target = (INT32)Script::lineCount;
     return true;
+}
+
+static void PublishError(const char *source) {
+    Parser::errorLine = badLine;
+    Parser::errorMsg = badMsg ? badMsg : "syntax error";
+    Parser::errorCol = 0;
+
+    if (badAt && badAt >= source) {
+        const char *lineStart = badAt;
+        while (lineStart > source && lineStart[-1] != '\n') lineStart--;
+        Parser::errorCol = (UINT32)(badAt - lineStart);
+    }
 }
 
 INT32 Parser::Load(const char *source, UINT64 length) {
@@ -522,16 +543,30 @@ INT32 Parser::Load(const char *source, UINT64 length) {
     srcLine = 1;
     lookCount = 0;
     badLine = 0;
+    badMsg = 0;
+    badAt = 0;
+
+    errorMsg = 0;
+    errorLine = 0;
+    errorCol = 0;
 
     while (Peek(0).kind != TK_END) {
         if (IsWord(Peek(0), "sub")
             && Peek(1).kind == TK_WORD
             && Peek(2).kind == TK_PUNCT && Peek(2).punct == '(') {
-            if (!Sub()) return (INT32)badLine;
+            if (!Sub()) { PublishError(source); return (INT32)badLine; }
         } else {
-            if (!Statement()) return (INT32)badLine;
+            if (!Statement()) { PublishError(source); return (INT32)badLine; }
         }
     }
 
-    return Script::ResolveLables();
+    INT32 unresolved = Script::ResolveLables();
+    if (unresolved >= 0) {
+        badLine = (UINT32)unresolved;
+        badMsg = "unknown label or sub";
+        badAt = 0;
+        PublishError(source);
+    }
+
+    return unresolved;
 }

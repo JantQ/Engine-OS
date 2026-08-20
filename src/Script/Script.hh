@@ -15,7 +15,7 @@
 #define GAME_HEADER_BYTES (GAME_MAGIC_LENGHT + 8)
 
 static const UINT8 GAME_MAGIC[GAME_MAGIC_LENGHT] = {
-    'E','n','G','i','N','e','G','a','M','e','B','l','O','b','1','!'};
+    'E','n','G','i','N','e','G','a','M','e','B','l','O','b','2','!'};
 
 enum ScriptOp : UINT8 {
     OP_NONE = 0,

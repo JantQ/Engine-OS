@@ -7,10 +7,11 @@
 #include "../Text.hh"
 #include "../input/keyboard.hh"
 #include "../Script/Script.hh"
+#include "../Compiler/Loader.hh"
 
 
-extern "C" UINT8 gameAssets[GAME_HEADER_BYTES + SCRIPT_MAX_SOURCE] = {
-    'E','n','G','i','N','e','G','a','M','e','B','l','O','b','1','!',
+extern "C" UINT8 gameAssets[GAME_HEADER_BYTES + ENEXE_MAX_BYTES] = {
+    'E','n','G','i','N','e','G','a','M','e','B','l','O','b','2','!',
 };
 
 
@@ -103,23 +104,13 @@ extern "C" UINT32 init_runtime(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemT
         gameLenght |= (UINT64)gameAssets[GAME_MAGIC_LENGHT + i] << (i * 8);
     }
 
-    if (gameLenght > 0 && gameLenght <= SCRIPT_MAX_SOURCE) {
-        INT32 badLine = Script::Load((const char*)(gameAssets + GAME_HEADER_BYTES), gameLenght);
-
-        if (badLine < 0) {
-            Script::RunLoop(false);
-
-            while (1) {
-                Graphics::back.clear(0x00000000);
-                Text::DrawString(Graphics::back, width / 2 - 80, height / 2, "GAME ENDED", 2);
-                Graphics::PresentFrame();
-            }
-        }
+    if (gameLenght > 0 && gameLenght <= ENEXE_MAX_BYTES) {
+        LoadResult lr = Loader::RunImage(gameAssets + GAME_HEADER_BYTES, gameLenght);
+        const char *msg = (lr == LOAD_OK) ? "GAME ENDED" : Loader::ResultName(lr);
 
         while (1) {
             Graphics::back.clear(0x00000000);
-            Text::DrawString(Graphics::back, width / 2 - 120, height / 2, "BAD SCRIPT LINE", 2);
-            Text::DrawUInt(Graphics::back, width / 2 + 128, height / 2, (UINT64)badLine, 2);
+            Text::DrawString(Graphics::back, width / 2 - 120, height / 2, msg, 2);
             Graphics::PresentFrame();
         }
     }
