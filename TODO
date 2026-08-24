@@ -1,0 +1,47 @@
+Change code syntax
+
+peek bx x y
+->
+y = by[x]; // read
+
+poke by x y
+->
+by[x] = y; // write
+
+for() {};
+break;
+continue;
+
+sub int getFood() { return 0/xyz;}
+sub void getSomething() { return "some variable (can return anything (dangeroud to have))"}
+sub bool hasFood() { return true/false;}
+
+sub Foo(int a, int b) {}
+
+byte, short, int, long (to actually mean something)
+bool, float, char/string
+
+&&, ||, +=, ++
+
+negatives like (num 100 100 -5) // parser doesnt read -5
+make (text) take numbers also and not just strings
+
+need to fix $0-$9 temp variables
+
+#include "something"
+so that we could include other files where we could have math include
+
+struct
+
+% modulo
+
+! truth checks
+
+bitwise operations so that we can parse 0x00FF00 from color into something else
+
+
+Other things
+
+Make the Kernel calls like Rect and Text use reduced amount of Code so that its closer to the opcode
+
+Make post into r/osdev

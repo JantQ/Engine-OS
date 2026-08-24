@@ -13,6 +13,8 @@
 #include "Editor/Editor.hh"
 #include "FileSystem/EnFS.hh"
 #include "PCIe/storage/part.hh"
+#include "USB/XHCI.hh"
+#include "Serial/Serial.hh"
 
 
 extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
@@ -94,8 +96,11 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
 
     // EXIT UEFI
+    UINT8 before = IO::inb(0x64);
 
     EFI_STATUS BootStatus = SystemTable->BootServices->ExitBootServices(ImageHandle ,mapKey);
+
+    UINT8 after = IO::inb(0x64);
 
     Frames::Init(memoryMap, mapSize, descriptorSize, bitmapMemory, bitmapBytes);
 
@@ -112,8 +117,46 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     Text::DrawString(Graphics::back, 0, 0, "Waiting for NVME!");
 
-
+    PciDevice *xhci = Pci::FindClass(0x0C, 0x03);
     PciDevice *nvme = Pci::FindClass(0x01, 0X08);
+    
+    UINT32 speed = 0;
+
+    if (Xhci::Init(xhci)) {
+        Xhci::Dump();
+        Xhci::WalkExtCaps();
+
+        if (Xhci::TakeOwnership() && Xhci::HaltController() && Xhci::ResetController()) {
+            Xhci::DumpOperational();
+            
+            if (Xhci::StartController()) {
+                Xhci::PowerPorts();
+                Xhci::DumpPorts();
+                Xhci::ResetAllPorts();
+
+                UINT32 slot = 0;
+                if (Xhci::EnableSlot(&slot)) {
+                    UINT32 port = Xhci::FirstEnabledPort(&speed);
+                    Xhci::Line("  chose port      ", port, 2);
+
+                    if (port && Xhci::AddressDevive(slot, port, speed)) {
+                        Clock::Delay(10);
+                        if (Xhci::GetDeviceDescriptor(slot) && Xhci::GetConfigDescriptor(slot) && Xhci::SetConfiguration(slot) && Xhci::SetBootProtocol(slot) && Xhci::ConfigureHidEndpoint(slot, speed)) {
+                            for (UINT32 n = 0; n < 400; n++) {
+                                Xhci::QueueHidRead(slot);
+
+                                if (Xhci::PollHidReport(50)) {
+                                    Xhci::Line("  mod/key      ", ((UINT64)Xhci::hidReport[0] << 8) | Xhci::hidReport[2], 4);
+                                    Xhci::QueueHidRead(slot);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } 
+    else Serial::Print("xHCI: not found or not responding");
     bool nvmeOk = Nvme::Init(nvme);
     bool idOk = nvmeOk && Nvme::IdentifyAll();
     bool ioOk = idOk && Nvme::CreateIoQueues();
@@ -140,6 +183,9 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     bool showPartTable = false;
 
+    Console::Draw(Graphics::back, 0, 0, 1);
+    Graphics::PresentFrame();
+    for (;;) __asm__ __volatile__("hlt");
     while (1) {
         Graphics::back.clear(0x00000000);
         UINT64 now = Clock::Millis();

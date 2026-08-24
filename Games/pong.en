@@ -23,90 +23,90 @@ int dx = 0;
 int dy = 0;
 serve();
 
-label loop;
-input();
-clamp();
-move();
-draw();
-wait 16;
-flip;
-goto loop;
+while (0 == 0) {
+   input();
+   clamp();
+   move();
+   draw();
+   wait 16;
+   flip;
+}
 
 sub input() {
    key w k;
-   if (k == 0) goto i1;
-   p1y = p1y - pspeed;
-   label i1;
+   if (k != 0) {
+      p1y = p1y - pspeed;
+   }
 
    key s k;
-   if (k == 0) goto i2;
-   p1y = p1y + pspeed;
-   label i2;
+   if (k != 0) {
+      p1y = p1y + pspeed;
+   }
 
    key up k;
-   if (k == 0) goto i3;
-   p2y = p2y - pspeed;
-   label i3;
+   if (k != 0) {
+      p2y = p2y - pspeed;
+   }
 
    key down k;
-   if (k == 0) goto i4;
-   p2y = p2y + pspeed;
-   label i4;
+   if (k != 0) {
+      p2y = p2y + pspeed;
+   }
 }
 
 sub clamp() {
-   if (p1y > 0) goto c1;
-   p1y = 0;
-   label c1;
-   if (p1y < maxy) goto c2;
-   p1y = maxy;
-   label c2;
+   if (p1y < 0) {
+      p1y = 0;
+   } else if (p1y > maxy) {
+      p1y = maxy;
+   }
 
-   if (p2y > 0) goto c3;
-   p2y = 0;
-   label c3;
-   if (p2y < maxy) goto c4;
-   p2y = maxy;
-   label c4;
+   if (p2y < 0) {
+      p2y = 0;
+   } else if (p2y > maxy) {
+      p2y = maxy;
+   }
 }
 
 sub move() {
    bx = bx + dx;
    by = by + dy;
 
-   if (by > 0) goto m1;
-   dy = -dy;
-   by = by + dy;
-   label m1;
-   if (by < bmax) goto m2;
-   dy = -dy;
-   by = by + dy;
-   label m2;
+   if (by <= 0) {
+      dy = -dy;
+      by = by + dy;
+   } else if (by >= bmax) {
+      dy = -dy;
+      by = by + dy;
+   }
 
    // left paddle
-   if (bx > 40) goto m3;
-   if (by < p1y) goto m3;
-   if (by > p1y + 90) goto m3;
-   dx = -dx;
-   bx = 41;
-   label m3;
+   if (bx <= 40) {
+      if (by >= p1y) {
+         if (by <= p1y + 90) {
+            dx = -dx;
+            bx = 41;
+         }
+      }
+   }
 
    // right paddle
-   if (bx < p2hit) goto m4;
-   if (by < p2y) goto m4;
-   if (by > p2y + 90) goto m4;
-   dx = -dx;
-   bx = p2hit - 1;
-   label m4;
+   if (bx >= p2hit) {
+      if (by >= p2y) {
+         if (by <= p2y + 90) {
+            dx = -dx;
+            bx = p2hit - 1;
+         }
+      }
+   }
 
-   if (bx > 0) goto m5;
-   s2 = s2 + 1;
-   serve();
-   label m5;
-   if (bx < w) goto m6;
-   s1 = s1 + 1;
-   serve();
-   label m6;
+   if (bx <= 0) {
+      s2 = s2 + 1;
+      serve();
+   } else if (bx >= w) {
+      s1 = s1 + 1;
+      serve();
+   }
 }
 
 sub serve() {

@@ -4,7 +4,7 @@
 #include "../Graphics/Framebuffer.hh"
 class Console {
     public:
-        static const UINT32 MAX_LINE = 32;
+        static const UINT32 MAX_LINE = 96;
         static const UINT32 MAX_COLS = 128;
 
         static void Print(char c);

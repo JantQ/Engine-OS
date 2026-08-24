@@ -34,7 +34,7 @@ static bool IsSpace(char c) {
 static bool isPunct(char c) {
     return c == '{' || c == '}' || c == '(' || c == ')' || c == ';' || c == ','
         || c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '<'
-        || c == '>' || c == '!'; 
+        || c == '>' || c == '!' || c == '[' || c == ']'; 
 }
 
 static bool IsTemp(const ScriptArg &a) {
@@ -218,6 +218,21 @@ static bool EmitOp2(UINT8 op, const ScriptArg &a, const ScriptArg &b, UINT32 lin
     return true;
 }
 
+static bool EmitOp3(UINT8 op, const ScriptArg &a, const ScriptArg &b, const ScriptArg &c, UINT32 line) {
+    if (Script::lineCount >= SCRIPT_MAX_LINES) return false;
+
+    ScriptLine &L = Script::lines[Script::lineCount++];
+    L.op = op;
+    L.a = a;
+    L.b = b;
+    L.c = c;
+    L.target = -1;
+    L.srcLine = line;
+    L.ref = 0;
+    L.refLenght = 0;
+    return true;
+}
+
 static bool Materialize(ScriptArg *v, const LexTok &t) {
     if (IsTemp(*v)) return true;
 
@@ -242,6 +257,20 @@ static bool Primary(ScriptArg *out) {
     if (t.kind != TK_WORD) return Fail(t, "expected a value");
     Next();
     if (!Script::ParseArg(t.word, out)) return Fail(t, "not a valid number or name");
+
+    if (Peek(0).kind == TK_PUNCT && Peek(0).punct == '[') {
+        Next();
+
+        ScriptArg idx;
+        if (!Expr(&idx)) return false;
+
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ']') return Fail(Peek(0), "expected ']");
+        Next();
+
+        ScriptArg base = *out;
+        if (!NewTemp(out)) return Fail(t, "expression too complex");
+        if (!EmitOp3(OP_PEEK, base, idx, *out, t.line)) return Fail(t, "script too long");
+    }
     return true;
 }
 
@@ -450,6 +479,32 @@ static bool Statement() {
 
     if (IsWord(first, "if")) return IfStatement();
     if (IsWord(first, "while")) return WhileStatement();
+
+    if(first.kind == TK_WORD && Peek(1).kind == TK_PUNCT && Peek(1).punct == '[') {
+        LexTok name = Next();
+        Next();
+
+        ScriptArg base;
+        if (!Script::ParseArg(name.word, &base)) return Fail(name, "not a valid variable name");
+
+        ScriptArg idx;
+        if (!Expr(&idx)) return false;
+
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ']') return Fail(Peek(0), "expected ']");
+        Next();
+
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != '=' || Peek(0).punct2 != 0) return Fail(Peek(0), "expected '=' after ']'");
+        Next();
+
+        ScriptArg val;
+        if (!Expr(&val)) return false;
+
+        if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
+        Next();
+
+        if (!EmitOp3(OP_POKE, base, idx, val, name.line)) return Fail(name, "script too long");
+        return true;
+    }
 
     UINT32 at = IsType(first) ? 1 : 0;
 
