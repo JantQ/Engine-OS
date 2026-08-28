@@ -20,6 +20,10 @@ static const UINT8 GAME_MAGIC[GAME_MAGIC_LENGHT] = {
 enum ScriptOp : UINT8 {
     OP_NONE = 0,
     OP_SET,
+    OP_SET_BYTE,
+    OP_SET_SHORT,
+    OP_SET_INT,
+    OP_SET_LONG,
     OP_ADD,
     OP_SUB,
     OP_MUL,
@@ -41,6 +45,7 @@ enum ScriptOp : UINT8 {
     OP_PEEK,
     OP_GOSUB,
     OP_RETURN,
+    OP_TRUNC,
 };
 
 struct ScriptArg {
@@ -90,6 +95,7 @@ class Script {
         static inline ScriptLine lines[SCRIPT_MAX_LINES];
         static inline char varNames[SCRIPT_MAX_VARS][SCRIPT_NAME_LENGHT];
         static inline INT64 vars[SCRIPT_MAX_VARS];
+        static inline UINT8 varWidth[SCRIPT_MAX_VARS];
         static inline UINT32 varCount = 0;
         static inline Lable lables[SCRIPT_MAX_LABLES];
         static inline UINT32 lableCount = 0;

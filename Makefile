@@ -59,9 +59,6 @@ run: BOOTX64.EFI
 		-serial stdio \
 		-drive file=disk.img,if=none,id=nvm,format=raw \
 		-device nvme,serial=deadbeed,drive=nvm \
-		-machine q35,i8042=off \
-		-device qemu-xhci,id=xhci \
-		-device usb-kbd,bus=xhci.0 \
 
 
 rungame:

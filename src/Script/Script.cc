@@ -134,6 +134,7 @@ void Script::ResetState() {
     FreeArena();
     lineCount = 0;
     pc = 0;
+    for (UINT32 i = 0; i < SCRIPT_MAX_VARS; i++) varWidth[i] = 0;
     varCount = 0;
     lableCount = 0;
     stringUsed = 0;
@@ -168,17 +169,27 @@ bool Script::ParseStatement(Token *toks, UINT32 n, UINT32 srcLine) {
     L.refLenght = 0;
 
     if (TokenIs(toks[0], "set") || TokenIs(toks[0], "add") || TokenIs(toks[0], "sub")
-        || TokenIs(toks[0], "mul") || TokenIs(toks[0], "div") || TokenIs(toks[0], "rnd")) {
+        || TokenIs(toks[0], "mul") || TokenIs(toks[0], "div") || TokenIs(toks[0], "rnd")
+        || TokenIs(toks[0], "byte") || TokenIs(toks[0], "short") || TokenIs(toks[0], "int") || TokenIs(toks[0], "long")) {
         if (n != 3) return false;
         if (TokenIs(toks[0], "set")) L.op = OP_SET;
         else if (TokenIs(toks[0], "add")) L.op = OP_ADD;
         else if (TokenIs(toks[0], "sub")) L.op = OP_SUB;
         else if (TokenIs(toks[0], "mul")) L.op = OP_MUL;
         else if (TokenIs(toks[0], "div")) L.op = OP_DIV;
+        else if (TokenIs(toks[0], "byte")) L.op = OP_SET_BYTE;
+        else if (TokenIs(toks[0], "short")) L.op = OP_SET_SHORT;
+        else if (TokenIs(toks[0], "int")) L.op = OP_SET_INT;
+        else if (TokenIs(toks[0], "long")) L.op = OP_SET_LONG;
         else L.op = OP_RND;
 
         if (!ParseVar(toks[1], &L.a)) return false;
         if (!ParseArg(toks[2], &L.b)) return false;
+
+        if (L.op == OP_SET_BYTE) varWidth[L.a.value] = 1;
+        else if (L.op == OP_SET_SHORT) varWidth[L.a.value] = 2;
+        else if (L.op == OP_SET_INT) varWidth[L.a.value] = 4;
+        else if (L.op == OP_SET_LONG) varWidth[L.a.value] = 8;
     }
     else if (TokenIs(toks[0], "goto")) {
         if (n != 2) return false;
@@ -393,6 +404,19 @@ bool Script::Step() {
 
         switch (L.op) {
             case OP_SET: Script::vars[L.a.value] = Val(L.b); pc++; break;
+            case OP_SET_BYTE: Script::vars[L.a.value] = (INT64)(INT8)Val(L.b); pc++; break;
+            case OP_SET_SHORT: Script::vars[L.a.value] = (INT64)(INT16)Val(L.b); pc++; break;
+            case OP_SET_INT: Script::vars[L.a.value] = (INT64)(INT32)Val(L.b); pc++; break;
+            case OP_SET_LONG: Script::vars[L.a.value] = Val(L.b); pc++; break;
+            case OP_TRUNC: {
+                INT64 v = Script::vars[L.a.value];
+                if (L.b.value == 1) v = (INT64)(INT8)v;
+                else if (L.b.value == 2) v = (INT64)(INT16)v;
+                else if (L.b.value == 4) v = (INT64)(INT32)v;
+                Script::vars[L.a.value] = v;
+                pc++;
+                break;
+            }
             case OP_ADD: Script::vars[L.a.value] += Val(L.b); pc++; break;
             case OP_SUB: Script::vars[L.a.value] -= Val(L.b); pc++; break;
             case OP_MUL: Script::vars[L.a.value] *= Val(L.b); pc++; break;

@@ -117,11 +117,11 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     Text::DrawString(Graphics::back, 0, 0, "Waiting for NVME!");
 
-    PciDevice *xhci = Pci::FindClass(0x0C, 0x03);
+    // PciDevice *xhci = Pci::FindClass(0x0C, 0x03);
     PciDevice *nvme = Pci::FindClass(0x01, 0X08);
     
     UINT32 speed = 0;
-
+ /*
     if (Xhci::Init(xhci)) {
         Xhci::Dump();
         Xhci::WalkExtCaps();
@@ -142,7 +142,7 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
                     if (port && Xhci::AddressDevive(slot, port, speed)) {
                         Clock::Delay(10);
                         if (Xhci::GetDeviceDescriptor(slot) && Xhci::GetConfigDescriptor(slot) && Xhci::SetConfiguration(slot) && Xhci::SetBootProtocol(slot) && Xhci::ConfigureHidEndpoint(slot, speed)) {
-                            for (UINT32 n = 0; n < 400; n++) {
+                            for (UINT32 n = 0; n < 1; n++) {
                                 Xhci::QueueHidRead(slot);
 
                                 if (Xhci::PollHidReport(50)) {
@@ -157,6 +157,7 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
         }
     } 
     else Serial::Print("xHCI: not found or not responding");
+    */
     bool nvmeOk = Nvme::Init(nvme);
     bool idOk = nvmeOk && Nvme::IdentifyAll();
     bool ioOk = idOk && Nvme::CreateIoQueues();
@@ -185,11 +186,11 @@ extern "C" UINT32 init_kernel(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTa
 
     Console::Draw(Graphics::back, 0, 0, 1);
     Graphics::PresentFrame();
-    for (;;) __asm__ __volatile__("hlt");
+    // for (;;) __asm__ __volatile__("hlt");
     while (1) {
         Graphics::back.clear(0x00000000);
         UINT64 now = Clock::Millis();
-
+        
         if (Editor::active) {
             Editor::Update(Keyboard::PollKey());
             Editor::Draw(Graphics::back);

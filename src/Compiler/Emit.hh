@@ -11,6 +11,22 @@
 #define REG_RSI 6
 #define REG_RDI 7
 
+#define REG_R8 8
+#define REG_R9 9
+#define REG_R10 10
+#define REG_R11 11
+#define REG_R12 12
+#define REG_R13 13
+#define REG_R14 14
+#define REG_R15 15
+
+enum MemSize{
+    SIZE_BYTE,
+    SIZE_SHORT,
+    SIZE_INT,
+    SIZE_LONG
+};
+
 class Emit {
     public:
         UINT8 *buffer;
@@ -33,11 +49,14 @@ class Emit {
             buffer[used++] = val;
         }
 
-        void U32(UINT32 val) {
+        void U16(UINT16 val) {
             U8((UINT8)val);
             U8((UINT8)(val >> 8));
-            U8((UINT8)(val >> 16));
-            U8((UINT8)(val >> 24));
+        }
+
+        void U32(UINT32 val) {
+            U16((UINT16)val);
+            U16((UINT16)(val >> 16));
         }
 
         void U64(UINT64 val) {
@@ -50,6 +69,25 @@ class Emit {
             U8(op);
             U8((UINT8)(0x80 | (regField << 3) | REG_RBX));
             U32(disp);
+        }
+
+        void SignExtendRax(MemSize size) {
+            switch (size) {
+                case SIZE_BYTE:
+                    U8(0x48); U8(0x0F); U8(0xBE); U8(0xC0); 
+                    break;
+
+                case SIZE_SHORT:
+                    U8(0x48); U8(0x0F); U8(0xBF); U8(0xC0); 
+                    break;
+
+                case SIZE_INT:
+                    U8(0x48); U8(0x63); U8(0xC0); 
+                    break;
+
+                default:
+                    break;
+            }
         }
 
         void MemRbx0F(UINT8 op, UINT8 regField, UINT32 disp) {

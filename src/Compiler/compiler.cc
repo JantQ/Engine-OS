@@ -11,6 +11,13 @@ static bool FitsImm32(INT64 val) {
     return val >= -2147483648LL && val <= 2147483647LL;
 }
 
+static MemSize WidthSize(INT64 bytes) {
+    if (bytes == 1) return SIZE_BYTE;
+    if (bytes == 2) return SIZE_SHORT;
+    if (bytes == 4) return SIZE_INT;
+    return SIZE_LONG;
+}
+
 static void LoadReg(ScriptArg &args, UINT8 reg = REG_RAX ) {
     if (args.isVar) {
         e.MemRbx(0x8B, reg, VarDisp(args.value)); // mov rax, [rbx+disp]
@@ -68,6 +75,35 @@ UINT64 Compiler::Compile(UINT8 *out, UINT64 cap, UINT32 *badLine) {
                 e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value)); // mov [rbx+x], rax
                 break;
             
+            case OP_SET_BYTE:
+                LoadReg(Line.b);
+                e.SignExtendRax(SIZE_BYTE);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value)); // mov [rbx+x], rax
+                break;
+
+            case OP_SET_SHORT:
+                LoadReg(Line.b);
+                e.SignExtendRax(SIZE_SHORT);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value)); // mov [rbx+x], rax
+                break;
+
+            case OP_SET_INT:
+                LoadReg(Line.b);
+                e.SignExtendRax(SIZE_INT);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value)); // mov [rbx+x], rax
+                break;
+
+            case OP_SET_LONG:
+                LoadReg(Line.b);
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value)); // mov [rbx+x], rax
+                break;
+
+            case OP_TRUNC:
+                e.MemRbx(0x8B, REG_RAX, VarDisp(Line.a.value)); // mov rax, [rbx+x]
+                e.SignExtendRax(WidthSize(Line.b.value));
+                e.MemRbx(0x89, REG_RAX, VarDisp(Line.a.value)); // mov [rbx+x], rax
+                break;
+
             case OP_ADD:
                 LoadReg(Line.b);
                 e.MemRbx(0x01, REG_RAX, VarDisp(Line.a.value)); // add [rbx+x], rax

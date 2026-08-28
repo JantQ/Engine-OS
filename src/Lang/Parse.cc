@@ -508,8 +508,91 @@ static bool Statement() {
 
     UINT32 at = IsType(first) ? 1 : 0;
 
-    if (Peek(at).kind == TK_WORD && Peek(at + 1).kind == TK_PUNCT && Peek(at + 1).punct == '=' && Peek(at + 1).punct2 == 0) {
-        if (at) Next();
+    if (IsWord(first, "byte")) {
+        if (Peek(at).kind == TK_WORD && Peek(at + 1).kind == TK_PUNCT && Peek(at + 1).punct == '=' && Peek(at + 1).punct2 == 0) {
+            if (at) Next();
+            LexTok name = Next();
+            Next();
+
+            ScriptArg dst;
+            if (!Script::ParseVar(name.word, &dst)) return Fail(name, "not a valid variable name");
+            Script::varWidth[dst.value] = 1;
+
+            ScriptArg val;
+            if (!Expr(&val)) return false;
+
+            if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
+            Next();
+
+            if (!EmitOp2(OP_SET_BYTE, dst, val, name.line)) return Fail(name, "script too long");
+            return true;
+        }
+    }
+
+    if (IsWord(first, "short")) {
+        if (Peek(at).kind == TK_WORD && Peek(at + 1).kind == TK_PUNCT && Peek(at + 1).punct == '=' && Peek(at + 1).punct2 == 0) {
+            if (at) Next();
+            LexTok name = Next();
+            Next();
+
+            ScriptArg dst;
+            if (!Script::ParseVar(name.word, &dst)) return Fail(name, "not a valid variable name");
+            Script::varWidth[dst.value] = 2;
+
+            ScriptArg val;
+            if (!Expr(&val)) return false;
+
+            if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
+            Next();
+
+            if (!EmitOp2(OP_SET_SHORT, dst, val, name.line)) return Fail(name, "script too long");
+            return true;
+        }
+    }
+
+    if (IsWord(first, "int")) {
+        if (Peek(at).kind == TK_WORD && Peek(at + 1).kind == TK_PUNCT && Peek(at + 1).punct == '=' && Peek(at + 1).punct2 == 0) {
+            if (at) Next();
+            LexTok name = Next();
+            Next();
+
+            ScriptArg dst;
+            if (!Script::ParseVar(name.word, &dst)) return Fail(name, "not a valid variable name");
+            Script::varWidth[dst.value] = 4;
+
+            ScriptArg val;
+            if (!Expr(&val)) return false;
+
+            if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
+            Next();
+
+            if (!EmitOp2(OP_SET_INT, dst, val, name.line)) return Fail(name, "script too long");
+            return true;
+        }
+    }
+
+    if (IsWord(first, "long")) {
+        if (Peek(at).kind == TK_WORD && Peek(at + 1).kind == TK_PUNCT && Peek(at + 1).punct == '=' && Peek(at + 1).punct2 == 0) {
+            if (at) Next();
+            LexTok name = Next();
+            Next();
+
+            ScriptArg dst;
+            if (!Script::ParseVar(name.word, &dst)) return Fail(name, "not a valid variable name");
+            Script::varWidth[dst.value] = 8;
+
+            ScriptArg val;
+            if (!Expr(&val)) return false;
+
+            if (Peek(0).kind != TK_PUNCT || Peek(0).punct != ';') return Fail(Peek(0), "expected ';'");
+            Next();
+
+            if (!EmitOp2(OP_SET_LONG, dst, val, name.line)) return Fail(name, "script too long");
+            return true;
+        }
+    }
+
+    if (!at && first.kind == TK_WORD && Peek(1).kind == TK_PUNCT && Peek(1).punct == '=' && Peek(1).punct2 == 0) {
         LexTok name = Next();
         Next();
 
@@ -523,6 +606,14 @@ static bool Statement() {
         Next();
 
         if (!EmitOp2(OP_SET, dst, val, name.line)) return Fail(name, "script too long");
+
+       UINT8 w = Script::varWidth[dst.value];
+        if (w == 1 || w == 2 || w == 4) {
+            ScriptArg width;
+            width.isVar = false;
+            width.value = w;
+            if (!EmitOp2(OP_TRUNC, dst, width, name.line)) return Fail(name, "script too long");
+        }
         return true;
     }
 
